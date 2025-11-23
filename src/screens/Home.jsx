@@ -10,10 +10,14 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import ProductCard from '../components/ProductCard';
 import { categories, products, banners } from '../data/mockData';
+import { useCart } from '../context/CartContext';
 
 const Home = () => {
+    const navigation = useNavigation();
+    const { getCartItemsCount } = useCart();
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -71,7 +75,7 @@ const Home = () => {
     const renderProductItem = ({ item }) => (
         <ProductCard
             product={item}
-            onPress={() => console.log('Pressed:', item.name)}
+            onPress={() => navigation.navigate('ProductDetail', { product: item })}
         />
     );
 
@@ -87,11 +91,16 @@ const Home = () => {
                     <Text style={styles.greeting}>Hello, User!</Text>
                     <Text style={styles.subtitle}>Find your perfect electronics</Text>
                 </View>
-                <TouchableOpacity style={styles.cartButton}>
+                <TouchableOpacity
+                    style={styles.cartButton}
+                    onPress={() => navigation.navigate('Cart')}
+                >
                     <Ionicons name="cart-outline" size={24} color="#333" />
-                    <View style={styles.cartBadge}>
-                        <Text style={styles.cartBadgeText}>2</Text>
-                    </View>
+                    {getCartItemsCount() > 0 && (
+                        <View style={styles.cartBadge}>
+                            <Text style={styles.cartBadgeText}>{getCartItemsCount()}</Text>
+                        </View>
+                    )}
                 </TouchableOpacity>
             </View>
 
@@ -104,6 +113,11 @@ const Home = () => {
                     value={searchQuery}
                     onChangeText={setSearchQuery}
                 />
+                {searchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setSearchQuery('')}>
+                        <Ionicons name="close-circle" size={20} color="#999" />
+                    </TouchableOpacity>
+                )}
             </View>
 
             {/* Banners Section */}
@@ -140,14 +154,25 @@ const Home = () => {
                     </Text>
                     <Text style={styles.productCount}>({filteredProducts.length})</Text>
                 </View>
-                <FlatList
-                    data={filteredProducts}
-                    numColumns={2}
-                    showsVerticalScrollIndicator={false}
-                    keyExtractor={(item) => item.id}
-                    renderItem={renderProductItem}
-                    contentContainerStyle={styles.productsGrid}
-                />
+
+                {filteredProducts.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <Ionicons name="search-outline" size={64} color="#CCC" />
+                        <Text style={styles.emptyStateTitle}>No products found</Text>
+                        <Text style={styles.emptyStateText}>
+                            Try adjusting your search or filter criteria
+                        </Text>
+                    </View>
+                ) : (
+                    <FlatList
+                        data={filteredProducts}
+                        numColumns={2}
+                        showsVerticalScrollIndicator={false}
+                        keyExtractor={(item) => item.id}
+                        renderItem={renderProductItem}
+                        contentContainerStyle={styles.productsGrid}
+                    />
+                )}
             </View>
         </SafeAreaView>
     );
@@ -164,6 +189,8 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         padding: 16,
         backgroundColor: 'white',
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
     },
     headerContent: {
         flex: 1,
@@ -184,14 +211,15 @@ const styles = StyleSheet.create({
     },
     cartBadge: {
         position: 'absolute',
-        top: 0,
-        right: 0,
+        top: -4,
+        right: -4,
         backgroundColor: '#FF6B6B',
         borderRadius: 10,
-        width: 20,
+        minWidth: 20,
         height: 20,
         justifyContent: 'center',
         alignItems: 'center',
+        paddingHorizontal: 4,
     },
     cartBadgeText: {
         color: 'white',
@@ -221,6 +249,7 @@ const styles = StyleSheet.create({
     },
     section: {
         marginBottom: 24,
+        flex: 1,
     },
     sectionTitle: {
         fontSize: 20,
@@ -305,6 +334,26 @@ const styles = StyleSheet.create({
     },
     productsGrid: {
         paddingHorizontal: 8,
+        paddingBottom: 20,
+    },
+    emptyState: {
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 60,
+        paddingHorizontal: 40,
+    },
+    emptyStateTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#666',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    emptyStateText: {
+        fontSize: 14,
+        color: '#999',
+        textAlign: 'center',
+        lineHeight: 20,
     },
 });
 
