@@ -16,6 +16,7 @@ import Cart from './src/screens/Cart';
 import Wishlist from './src/screens/Wishlist';
 import Compare from './src/screens/Compare';
 import Profile from './src/screens/Profile';
+import Checkout from "./src/screens/Checkout";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -184,6 +185,14 @@ const MainStack = () => {
                 component={Cart}
                 options={{
                     title: 'Shopping Cart',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <Stack.Screen
+                name="Checkout"
+                component={Checkout}
+                options={{
+                    title: 'Checkout',
                     headerBackTitle: 'Back'
                 }}
             />

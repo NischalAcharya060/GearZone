@@ -22,8 +22,7 @@ const Cart = () => {
             Alert.alert('Cart Empty', 'Please add items to cart before checkout');
             return;
         }
-        Alert.alert('Success', 'Proceeding to checkout!');
-        // navigation.navigate('Checkout');
+        navigation.navigate('Checkout');
     };
 
     const CartItem = ({ item }) => (
