@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -14,10 +14,15 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 
+// Firebase imports - UPDATED
+import { firestore } from '../../firebase/config';
+import { collection, addDoc, getDocs, query, orderBy } from 'firebase/firestore';
+
 const AddCategory = () => {
     const navigation = useNavigation();
     const [loading, setLoading] = useState(false);
     const [showIconModal, setShowIconModal] = useState(false);
+    const [existingCategories, setExistingCategories] = useState([]);
     const [formData, setFormData] = useState({
         name: '',
         icon: '',
@@ -35,16 +40,28 @@ const AddCategory = () => {
         'airplane-outline', 'train-outline', 'boat-outline', 'bed-outline'
     ];
 
-    // Default categories that would typically come from your backend
-    const defaultCategories = [
-        { id: '1', name: 'Headphones', icon: 'headset-outline' },
-        { id: '2', name: 'Smartwatches', icon: 'watch-outline' },
-        { id: '3', name: 'Laptops', icon: 'laptop-outline' },
-        { id: '4', name: 'Smartphones', icon: 'phone-portrait-outline' },
-    ];
+    // Fetch categories from Firebase on component mount
+    useEffect(() => {
+        fetchCategories();
+    }, []);
 
-    // In a real app, you would get this from your backend/context
-    const [existingCategories, setExistingCategories] = useState(defaultCategories);
+    const fetchCategories = async () => {
+        try {
+            const categoriesQuery = query(
+                collection(firestore, 'categories'), // UPDATED: firestore instead of db
+                orderBy('createdAt', 'desc')
+            );
+            const categoriesSnapshot = await getDocs(categoriesQuery);
+            const categoriesList = categoriesSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setExistingCategories(categoriesList);
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+            Alert.alert('Error', 'Failed to load categories');
+        }
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -83,10 +100,6 @@ const AddCategory = () => {
         return true;
     };
 
-    const generateCategoryId = () => {
-        return (existingCategories.length + 1).toString();
-    };
-
     const handleSubmit = async () => {
         if (!validateForm()) {
             return;
@@ -95,21 +108,21 @@ const AddCategory = () => {
         setLoading(true);
 
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1500));
-
             // Create new category object
             const newCategory = {
-                id: generateCategoryId(),
                 name: formData.name.trim(),
                 icon: formData.icon,
+                createdAt: new Date(),
+                productCount: 0, // Initialize product count
             };
 
-            // In a real app, you would send this to your backend
-            console.log('New Category Created:', newCategory);
+            // Save to Firestore - UPDATED: firestore instead of db
+            const docRef = await addDoc(collection(firestore, 'categories'), newCategory);
 
-            // For demo purposes, add to existing categories
-            setExistingCategories(prev => [...prev, newCategory]);
+            console.log('Category added with ID: ', docRef.id);
+
+            // Refresh the categories list
+            await fetchCategories();
 
             Alert.alert(
                 'Success',
@@ -128,6 +141,7 @@ const AddCategory = () => {
             );
 
         } catch (error) {
+            console.error('Error adding category:', error);
             Alert.alert('Error', 'Failed to add category. Please try again.');
         } finally {
             setLoading(false);
@@ -189,14 +203,29 @@ const AddCategory = () => {
                 {existingCategories.length} categories already exist
             </Text>
 
-            <View style={styles.categoriesList}>
-                {existingCategories.map((category) => (
-                    <View key={category.id} style={styles.categoryChip}>
-                        <Ionicons name={category.icon} size={16} color="#666" />
-                        <Text style={styles.categoryChipText}>{category.name}</Text>
-                    </View>
-                ))}
-            </View>
+            {existingCategories.length === 0 ? (
+                <View style={styles.emptyState}>
+                    <Ionicons name="folder-open-outline" size={32} color="#CCC" />
+                    <Text style={styles.emptyStateText}>No categories yet</Text>
+                    <Text style={styles.emptyStateSubtext}>
+                        Start by adding your first category
+                    </Text>
+                </View>
+            ) : (
+                <View style={styles.categoriesList}>
+                    {existingCategories.map((category) => (
+                        <View key={category.id} style={styles.categoryChip}>
+                            <Ionicons name={category.icon} size={16} color="#666" />
+                            <Text style={styles.categoryChipText}>{category.name}</Text>
+                            {category.productCount > 0 && (
+                                <Text style={styles.productCount}>
+                                    {category.productCount}
+                                </Text>
+                            )}
+                        </View>
+                    ))}
+                </View>
+            )}
         </View>
     );
 
@@ -259,7 +288,12 @@ const AddCategory = () => {
                                 <View style={styles.previewIcon}>
                                     <Ionicons name={formData.icon} size={32} color="#2563EB" />
                                 </View>
-                                <Text style={styles.previewName}>{formData.name}</Text>
+                                <View>
+                                    <Text style={styles.previewName}>{formData.name}</Text>
+                                    <Text style={styles.previewSubtext}>
+                                        This is how the category will appear in the app
+                                    </Text>
+                                </View>
                             </View>
                         </View>
                     )}
@@ -304,6 +338,7 @@ const AddCategory = () => {
     );
 };
 
+// Styles remain exactly the same...
 const styles = StyleSheet.create({
     container: {
         flex: 1,
@@ -413,7 +448,7 @@ const styles = StyleSheet.create({
     },
     previewContent: {
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
     },
     previewIcon: {
         width: 48,
@@ -428,6 +463,11 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: '600',
         color: '#1F2937',
+        marginBottom: 4,
+    },
+    previewSubtext: {
+        fontSize: 12,
+        color: '#6B7280',
     },
     categoriesList: {
         flexDirection: 'row',
@@ -442,11 +482,22 @@ const styles = StyleSheet.create({
         paddingVertical: 6,
         borderRadius: 16,
         marginBottom: 8,
+        position: 'relative',
     },
     categoryChipText: {
         fontSize: 12,
         color: '#374151',
         marginLeft: 4,
+        marginRight: 8,
+    },
+    productCount: {
+        fontSize: 10,
+        color: '#2563EB',
+        backgroundColor: '#EFF6FF',
+        paddingHorizontal: 6,
+        paddingVertical: 2,
+        borderRadius: 8,
+        fontWeight: '600',
     },
     submitButton: {
         backgroundColor: '#2563EB',
@@ -531,6 +582,22 @@ const styles = StyleSheet.create({
     iconItemSelected: {
         backgroundColor: '#EFF6FF',
         borderColor: '#2563EB',
+    },
+    emptyState: {
+        padding: 20,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyStateText: {
+        fontSize: 16,
+        color: '#666',
+        marginTop: 8,
+        marginBottom: 4,
+    },
+    emptyStateSubtext: {
+        fontSize: 14,
+        color: '#999',
+        textAlign: 'center',
     },
 });
 

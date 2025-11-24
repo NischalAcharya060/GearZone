@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -17,14 +17,16 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 
-// Import your categories data
-import { categories } from '../../data/mockData';
+// Firebase imports
+import { firestore } from '../../firebase/config';
+import { collection, addDoc, getDocs } from 'firebase/firestore';
 
 const AddProduct = () => {
     const navigation = useNavigation();
     const [loading, setLoading] = useState(false);
     const [images, setImages] = useState([]);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [categories, setCategories] = useState([]);
     const [formData, setFormData] = useState({
         name: '',
         description: '',
@@ -40,6 +42,26 @@ const AddProduct = () => {
             features: []
         }
     });
+
+    // Fetch categories from Firebase on component mount
+    useEffect(() => {
+        fetchCategories();
+    }, []);
+
+    const fetchCategories = async () => {
+        try {
+            const categoriesCollection = collection(firestore, 'categories');
+            const categoriesSnapshot = await getDocs(categoriesCollection);
+            const categoriesList = categoriesSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setCategories(categoriesList);
+        } catch (error) {
+            console.error('Error fetching categories:', error);
+            Alert.alert('Error', 'Failed to load categories');
+        }
+    };
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -59,24 +81,36 @@ const AddProduct = () => {
     };
 
     const pickImage = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        try {
+            // Request permissions
+            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+            if (status !== 'granted') {
+                Alert.alert('Permission required', 'Sorry, we need camera roll permissions to upload images.');
+                return;
+            }
 
-        if (status !== 'granted') {
-            Alert.alert('Permission required', 'Sorry, we need camera roll permissions to upload images.');
-            return;
-        }
+            let result = await ImagePicker.launchImageLibraryAsync({
+                // FIXED: Use the correct mediaTypes format
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                aspect: [4, 3],
+                quality: 0.7,
+                allowsMultipleSelection: true,
+                selectionLimit: 5,
+            });
 
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 1,
-            allowsMultipleSelection: true,
-        });
+            console.log('Image picker result:', result);
 
-        if (!result.canceled && result.assets) {
-            const newImages = result.assets.map(asset => asset.uri);
-            setImages(prev => [...prev, ...newImages]);
+            if (!result.canceled && result.assets) {
+                const newImages = result.assets.map(asset => asset.uri);
+                console.log('Selected images:', newImages);
+                setImages(prev => [...prev, ...newImages]);
+            } else {
+                console.log('Image selection canceled');
+            }
+        } catch (error) {
+            console.error('Error picking image:', error);
+            Alert.alert('Error', 'Failed to pick image. Please try again.');
         }
     };
 
@@ -123,6 +157,25 @@ const AddProduct = () => {
         return true;
     };
 
+    // Generate placeholder image paths based on product name
+    const generateImagePaths = () => {
+        const productName = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const imagePaths = [];
+
+        // Generate multiple placeholder image paths
+        for (let i = 0; i < images.length; i++) {
+            const path = `products/${productName}-${i + 1}.jpg`;
+            imagePaths.push(path);
+        }
+
+        return imagePaths;
+    };
+
+    // Use local image URIs directly (for demo purposes)
+    const getImageReferences = () => {
+        return images;
+    };
+
     const handleSubmit = async () => {
         if (!validateForm()) {
             return;
@@ -131,18 +184,21 @@ const AddProduct = () => {
         setLoading(true);
 
         try {
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            console.log('Starting product submission process...');
 
-            // Create new product object matching your data structure
+            // Generate image paths for Firestore
+            const imagePaths = generateImagePaths();
+            console.log('Generated image paths:', imagePaths);
+
+            // Create new product object
             const newProduct = {
-                id: Date.now().toString(),
-                name: formData.name,
+                name: formData.name.trim(),
                 category: formData.category,
                 price: parseFloat(formData.price),
-                originalPrice: parseFloat(formData.price) * 1.2, // 20% higher for original price
-                images: images,
-                description: formData.description,
+                originalPrice: parseFloat(formData.price) * 1.2,
+                images: imagePaths, // Store paths instead of uploaded URLs
+                imageUrls: getImageReferences(), // Store local URIs for demo
+                description: formData.description.trim(),
                 specifications: {
                     battery: formData.specifications.battery || 'Not specified',
                     connectivity: formData.specifications.connectivity || 'Not specified',
@@ -150,19 +206,29 @@ const AddProduct = () => {
                     features: formData.specifications.features.length > 0 ?
                         formData.specifications.features : ['Premium Quality', 'Latest Technology']
                 },
-                rating: 4.0, // Default rating for new products
+                rating: 4.0,
                 reviewCount: 0,
                 inStock: parseInt(formData.stock) > 0,
                 stock: parseInt(formData.stock),
-                brand: formData.brand || 'Generic',
+                brand: formData.brand.trim() || 'Generic',
                 sku: formData.sku || generateSKU(),
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                hasImages: images.length > 0,
+                imageCount: images.length,
+                imagePlaceholder: true, // Flag to indicate these are placeholder paths
             };
 
-            console.log('New Product Created:', newProduct);
+            console.log('Saving product to Firestore:', newProduct);
+
+            // Save to Firestore
+            const docRef = await addDoc(collection(firestore, 'products'), newProduct);
+
+            console.log('Product added with ID: ', docRef.id);
 
             Alert.alert(
                 'Success',
-                'Product added successfully!',
+                'Product added successfully!\n\nNote: Images are stored as local references. For production, upload images to a cloud service.',
                 [
                     {
                         text: 'OK',
@@ -172,28 +238,33 @@ const AddProduct = () => {
             );
 
             // Reset form
-            setFormData({
-                name: '',
-                description: '',
-                price: '',
-                category: '',
-                stock: '',
-                brand: '',
-                sku: '',
-                specifications: {
-                    battery: '',
-                    connectivity: '',
-                    weight: '',
-                    features: []
-                }
-            });
-            setImages([]);
+            resetForm();
 
         } catch (error) {
+            console.error('Error adding product:', error);
             Alert.alert('Error', 'Failed to add product. Please try again.');
         } finally {
             setLoading(false);
         }
+    };
+
+    const resetForm = () => {
+        setFormData({
+            name: '',
+            description: '',
+            price: '',
+            category: '',
+            stock: '',
+            brand: '',
+            sku: '',
+            specifications: {
+                battery: '',
+                connectivity: '',
+                weight: '',
+                features: []
+            }
+        });
+        setImages([]);
     };
 
     const CategoryModal = () => (
@@ -211,19 +282,29 @@ const AddProduct = () => {
                             <Ionicons name="close" size={24} color="#333" />
                         </TouchableOpacity>
                     </View>
-                    <FlatList
-                        data={categories}
-                        keyExtractor={(item) => item.id}
-                        renderItem={({ item }) => (
-                            <TouchableOpacity
-                                style={styles.categoryItem}
-                                onPress={() => selectCategory(item)}
-                            >
-                                <Ionicons name={item.icon} size={20} color="#666" />
-                                <Text style={styles.categoryName}>{item.name}</Text>
-                            </TouchableOpacity>
-                        )}
-                    />
+                    {categories.length === 0 ? (
+                        <View style={styles.emptyState}>
+                            <Ionicons name="folder-open-outline" size={48} color="#CCC" />
+                            <Text style={styles.emptyStateText}>No categories found</Text>
+                            <Text style={styles.emptyStateSubtext}>
+                                Add categories first from the admin panel
+                            </Text>
+                        </View>
+                    ) : (
+                        <FlatList
+                            data={categories}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => (
+                                <TouchableOpacity
+                                    style={styles.categoryItem}
+                                    onPress={() => selectCategory(item)}
+                                >
+                                    <Ionicons name={item.icon || 'cube-outline'} size={20} color="#666" />
+                                    <Text style={styles.categoryName}>{item.name}</Text>
+                                </TouchableOpacity>
+                            )}
+                        />
+                    )}
                 </View>
             </View>
         </Modal>
@@ -247,13 +328,21 @@ const AddProduct = () => {
                 {/* Image Upload Section */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Product Images *</Text>
-                    <Text style={styles.sectionSubtitle}>Add at least one image</Text>
+                    <Text style={styles.sectionSubtitle}>
+                        Add at least one image (max 5) - Stored as local references
+                    </Text>
 
                     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-                        <TouchableOpacity style={styles.imageUploadButton} onPress={pickImage}>
+                        <TouchableOpacity
+                            style={styles.imageUploadButton}
+                            onPress={pickImage}
+                            disabled={images.length >= 5}
+                        >
                             <Ionicons name="camera-outline" size={32} color="#666" />
-                            <Text style={styles.imageUploadText}>Add Images</Text>
-                            <Text style={styles.imageCount}>({images.length} selected)</Text>
+                            <Text style={styles.imageUploadText}>
+                                {images.length >= 5 ? 'Max 5 Images' : 'Add Images'}
+                            </Text>
+                            <Text style={styles.imageCount}>({images.length}/5)</Text>
                         </TouchableOpacity>
 
                         {images.map((image, index) => (
@@ -654,6 +743,22 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#374151',
         marginLeft: 12,
+    },
+    emptyState: {
+        padding: 40,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    emptyStateText: {
+        fontSize: 16,
+        color: '#666',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    emptyStateSubtext: {
+        fontSize: 14,
+        color: '#999',
+        textAlign: 'center',
     },
 });
 

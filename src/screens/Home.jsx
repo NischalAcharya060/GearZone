@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
     View,
     Text,
@@ -12,12 +12,17 @@ import {
     Dimensions,
     ScrollView,
     Alert,
+    ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
+
+// Firebase imports
+import { firestore } from '../firebase/config';
+import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+
 import ProductCard from '../components/ProductCard';
-import { categories, products, banners } from '../data/mockData';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -30,8 +35,82 @@ const Home = () => {
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeBanner, setActiveBanner] = useState(0);
+    const [products, setProducts] = useState([]);
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [banners, setBanners] = useState([]);
 
     const scrollX = useRef(new Animated.Value(0)).current;
+
+    // Fetch data from Firestore
+    useEffect(() => {
+        fetchData();
+    }, []);
+
+    const fetchData = async () => {
+        try {
+            setLoading(true);
+
+            // Fetch products
+            const productsQuery = query(
+                collection(firestore, 'products'),
+                orderBy('createdAt', 'desc'),
+                limit(20)
+            );
+            const productsSnapshot = await getDocs(productsQuery);
+            const productsList = productsSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setProducts(productsList);
+
+            // Fetch categories
+            const categoriesQuery = query(
+                collection(firestore, 'categories'),
+                orderBy('createdAt', 'desc')
+            );
+            const categoriesSnapshot = await getDocs(categoriesQuery);
+            const categoriesList = categoriesSnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setCategories(categoriesList);
+
+            // Create banners from featured products or use default banners
+            const featuredBanners = productsList.slice(0, 3).map((product, index) => ({
+                id: `banner-${index}`,
+                image: product.images && product.images.length > 0 ? product.images[0] : 'https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=800',
+                title: product.name,
+                subtitle: `Up to ${Math.floor(Math.random() * 50) + 10}% off on ${product.category}`
+            }));
+
+            // If no products, use default banners
+            if (featuredBanners.length === 0) {
+                setBanners([
+                    {
+                        id: '1',
+                        image: 'https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=800',
+                        title: 'Summer Sale',
+                        subtitle: 'Up to 50% off on electronics'
+                    },
+                    {
+                        id: '2',
+                        image: 'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800',
+                        title: 'New Arrivals',
+                        subtitle: 'Latest tech gadgets'
+                    }
+                ]);
+            } else {
+                setBanners(featuredBanners);
+            }
+
+        } catch (error) {
+            console.error('Error fetching data:', error);
+            Alert.alert('Error', 'Failed to load data. Please try again.');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const filteredProducts = useMemo(() => {
         let filtered = products;
@@ -43,13 +122,13 @@ const Home = () => {
         if (searchQuery) {
             filtered = filtered.filter(product =>
                 product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                product.brand.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
                 product.category.toLowerCase().includes(searchQuery.toLowerCase())
             );
         }
 
         return filtered;
-    }, [selectedCategory, searchQuery]);
+    }, [selectedCategory, searchQuery, products]);
 
     const handleCartPress = () => {
         if (!user) {
@@ -74,7 +153,6 @@ const Home = () => {
     };
 
     const handleBannerPress = () => {
-        // Navigate to all products when banner is pressed
         setSelectedCategory('All');
     };
 
@@ -126,7 +204,7 @@ const Home = () => {
                 selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryIconSelected
             ]}>
                 <Ionicons
-                    name={item.icon}
+                    name={item.icon || 'cube-outline'}
                     size={22}
                     color={selectedCategory === (item.id === 'all' ? 'All' : item.name) ? '#2563EB' : '#666'}
                 />
@@ -147,6 +225,18 @@ const Home = () => {
         [{ nativeEvent: { contentOffset: { x: scrollX } } }],
         { useNativeDriver: false }
     );
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container} edges={['top']}>
+                <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#2563EB" />
+                    <Text style={styles.loadingText}>Loading products...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container} edges={['top']}>
@@ -185,6 +275,18 @@ const Home = () => {
                 style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
+                refreshControl={
+                    <ScrollView
+                        refreshControl={
+                            <RefreshControl
+                                refreshing={loading}
+                                onRefresh={fetchData}
+                                colors={['#2563EB']}
+                                tintColor="#2563EB"
+                            />
+                        }
+                    />
+                }
             >
                 {/* Search Bar */}
                 <View style={styles.searchSection}>
@@ -194,67 +296,69 @@ const Home = () => {
                     >
                         <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
                         <Text style={styles.searchPlaceholder}>
-                            Search headphones, watches, laptops...
+                            Search products...
                         </Text>
                     </TouchableOpacity>
                 </View>
 
                 {/* Banners Section */}
-                <View style={styles.bannerSection}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Special Offers</Text>
-                        <TouchableOpacity onPress={() => setSelectedCategory('All')}>
-                            <Text style={styles.seeAllText}>See All</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View style={styles.bannerWrapper}>
-                        <Animated.FlatList
-                            data={banners}
-                            horizontal
-                            pagingEnabled
-                            showsHorizontalScrollIndicator={false}
-                            keyExtractor={(item) => item.id}
-                            renderItem={({ item, index }) => <BannerItem banner={item} index={index} />}
-                            contentContainerStyle={styles.bannerContent}
-                            onScroll={onBannerScroll}
-                            scrollEventThrottle={16}
-                        />
-                        <View style={styles.bannerIndicators}>
-                            {banners.map((_, index) => {
-                                const inputRange = [
-                                    (index - 1) * screenWidth,
-                                    index * screenWidth,
-                                    (index + 1) * screenWidth,
-                                ];
+                {banners.length > 0 && (
+                    <View style={styles.bannerSection}>
+                        <View style={styles.sectionHeader}>
+                            <Text style={styles.sectionTitle}>Special Offers</Text>
+                            <TouchableOpacity onPress={() => setSelectedCategory('All')}>
+                                <Text style={styles.seeAllText}>See All</Text>
+                            </TouchableOpacity>
+                        </View>
+                        <View style={styles.bannerWrapper}>
+                            <Animated.FlatList
+                                data={banners}
+                                horizontal
+                                pagingEnabled
+                                showsHorizontalScrollIndicator={false}
+                                keyExtractor={(item) => item.id}
+                                renderItem={({ item, index }) => <BannerItem banner={item} index={index} />}
+                                contentContainerStyle={styles.bannerContent}
+                                onScroll={onBannerScroll}
+                                scrollEventThrottle={16}
+                            />
+                            <View style={styles.bannerIndicators}>
+                                {banners.map((_, index) => {
+                                    const inputRange = [
+                                        (index - 1) * screenWidth,
+                                        index * screenWidth,
+                                        (index + 1) * screenWidth,
+                                    ];
 
-                                const dotWidth = scrollX.interpolate({
-                                    inputRange,
-                                    outputRange: [8, 20, 8],
-                                    extrapolate: 'clamp',
-                                });
+                                    const dotWidth = scrollX.interpolate({
+                                        inputRange,
+                                        outputRange: [8, 20, 8],
+                                        extrapolate: 'clamp',
+                                    });
 
-                                const opacity = scrollX.interpolate({
-                                    inputRange,
-                                    outputRange: [0.3, 1, 0.3],
-                                    extrapolate: 'clamp',
-                                });
+                                    const opacity = scrollX.interpolate({
+                                        inputRange,
+                                        outputRange: [0.3, 1, 0.3],
+                                        extrapolate: 'clamp',
+                                    });
 
-                                return (
-                                    <Animated.View
-                                        key={index}
-                                        style={[
-                                            styles.bannerDot,
-                                            {
-                                                width: dotWidth,
-                                                opacity: opacity,
-                                            },
-                                        ]}
-                                    />
-                                );
-                            })}
+                                    return (
+                                        <Animated.View
+                                            key={index}
+                                            style={[
+                                                styles.bannerDot,
+                                                {
+                                                    width: dotWidth,
+                                                    opacity: opacity,
+                                                },
+                                            ]}
+                                        />
+                                    );
+                                })}
+                            </View>
                         </View>
                     </View>
-                </View>
+                )}
 
                 {/* Categories Section */}
                 <View style={styles.categoriesSection}>
@@ -284,7 +388,6 @@ const Home = () => {
                         <TouchableOpacity
                             style={styles.filterButton}
                             onPress={() => {
-                                // Reset filters
                                 setSearchQuery('');
                                 setSelectedCategory('All');
                             }}
@@ -350,6 +453,17 @@ const styles = StyleSheet.create({
     },
     scrollContent: {
         flexGrow: 1,
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: '#FFFFFF',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#6B7280',
     },
     header: {
         flexDirection: 'row',
@@ -427,45 +541,6 @@ const styles = StyleSheet.create({
         fontSize: 16,
         color: '#999',
         fontWeight: '500',
-    },
-    loginPrompt: {
-        backgroundColor: '#EFF6FF',
-        marginHorizontal: 20,
-        marginBottom: 16,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: '#DBEAFE',
-        padding: 16,
-    },
-    loginPromptContent: {
-        flexDirection: 'row',
-        alignItems: 'center',
-    },
-    loginPromptTexts: {
-        flex: 1,
-        marginLeft: 12,
-        marginRight: 16,
-    },
-    loginPromptTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#1E40AF',
-        marginBottom: 2,
-    },
-    loginPromptSubtitle: {
-        fontSize: 14,
-        color: '#3B82F6',
-    },
-    loginPromptButton: {
-        backgroundColor: '#2563EB',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 8,
-    },
-    loginPromptButtonText: {
-        color: 'white',
-        fontSize: 14,
-        fontWeight: '600',
     },
     bannerSection: {
         marginBottom: 24,
