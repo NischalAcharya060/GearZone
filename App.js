@@ -22,6 +22,12 @@ import SignIn from './src/screens/SignIn';
 import SignUp from './src/screens/SignUp';
 import LoadingScreen from './src/screens/LoadingScreen';
 
+// Admin Screens
+import AddProduct from './src/screens/admin/AddProduct';
+import ManageOrders from './src/screens/admin/ManageOrders';
+import Analytics from './src/screens/admin/Analytics';
+import AddCategory from "./src/screens/admin/AddCategory";
+
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
@@ -109,8 +115,10 @@ const CompareStack = () => {
     );
 };
 
-// Profile Stack Navigator
+// Profile Stack Navigator (Includes Admin Screens)
 const ProfileStack = () => {
+    const { user } = useAuth();
+
     return (
         <Stack.Navigator>
             <Stack.Screen
@@ -118,6 +126,43 @@ const ProfileStack = () => {
                 component={Profile}
                 options={{ headerShown: false }}
             />
+            {/* Admin Only Screens */}
+            {user?.role === 'admin' && (
+                <>
+                    <Stack.Screen
+                        name="AddProduct"
+                        component={AddProduct}
+                        options={{
+                            title: 'Add Product',
+                            headerBackTitle: 'Back'
+                        }}
+                    />
+                    <Stack.Screen
+                        name="AddCategory"
+                        component={AddCategory}
+                        options={{
+                            title: 'Add Category',
+                            headerBackTitle: 'Back'
+                        }}
+                    />
+                    <Stack.Screen
+                        name="ManageOrders"
+                        component={ManageOrders}
+                        options={{
+                            title: 'Manage Orders',
+                            headerBackTitle: 'Back'
+                        }}
+                    />
+                    <Stack.Screen
+                        name="Analytics"
+                        component={Analytics}
+                        options={{
+                            title: 'Analytics',
+                            headerBackTitle: 'Back'
+                        }}
+                    />
+                </>
+            )}
         </Stack.Navigator>
     );
 };

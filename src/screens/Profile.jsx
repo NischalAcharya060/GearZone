@@ -104,7 +104,8 @@ const Profile = () => {
                 </View>
 
                 {/* Admin Panel (Only for admin users) */}
-                {user.role === 'admin' && (
+                // In Profile.js - Update the admin buttons section
+                {user?.role === 'admin' && (
                     <View style={styles.adminSection}>
                         <Text style={styles.adminTitle}>Admin Panel</Text>
                         <View style={styles.adminActions}>
@@ -117,16 +118,23 @@ const Profile = () => {
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.adminButton}
+                                onPress={() => navigation.navigate('AddCategory')}
+                            >
+                                <Ionicons name="folder-open-outline" size={20} color="#10B981" />
+                                <Text style={styles.adminButtonText}>Add Category</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.adminButton}
                                 onPress={() => navigation.navigate('ManageOrders')}
                             >
-                                <Ionicons name="list-outline" size={20} color="#10B981" />
+                                <Ionicons name="list-outline" size={20} color="#F59E0B" />
                                 <Text style={styles.adminButtonText}>Manage Orders</Text>
                             </TouchableOpacity>
                             <TouchableOpacity
                                 style={styles.adminButton}
                                 onPress={() => navigation.navigate('Analytics')}
                             >
-                                <Ionicons name="analytics-outline" size={20} color="#F59E0B" />
+                                <Ionicons name="analytics-outline" size={20} color="#8B5CF6" />
                                 <Text style={styles.adminButtonText}>Analytics</Text>
                             </TouchableOpacity>
                         </View>
