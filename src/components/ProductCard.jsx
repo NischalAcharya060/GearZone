@@ -7,18 +7,19 @@ import {
     StyleSheet
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useWishlist } from '../context/WishlistContext';
 
 const ProductCard = ({ product, onPress }) => {
-    const handleAddToCart = () => {
-        console.log('Added to cart:', product.name);
-    };
+    const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
 
-    const handleWishlist = () => {
-        console.log('Added to wishlist:', product.name);
-    };
+    const isWishlisted = isInWishlist(product.id);
 
-    const handleCompare = () => {
-        console.log('Added to compare:', product.name);
+    const handleWishlistPress = () => {
+        if (isWishlisted) {
+            removeFromWishlist(product.id);
+        } else {
+            addToWishlist(product);
+        }
     };
 
     return (
@@ -27,9 +28,13 @@ const ProductCard = ({ product, onPress }) => {
                 <Image source={{ uri: product.image }} style={styles.image} />
                 <TouchableOpacity
                     style={styles.wishlistButton}
-                    onPress={handleWishlist}
+                    onPress={handleWishlistPress}
                 >
-                    <Ionicons name="heart-outline" size={20} color="#666" />
+                    <Ionicons
+                        name={isWishlisted ? "heart" : "heart-outline"}
+                        size={20}
+                        color={isWishlisted ? "#FF6B6B" : "#666"}
+                    />
                 </TouchableOpacity>
                 {product.originalPrice > product.price && (
                     <View style={styles.discountBadge}>
@@ -45,7 +50,7 @@ const ProductCard = ({ product, onPress }) => {
                 <Text style={styles.name} numberOfLines={2}>{product.name}</Text>
 
                 <View style={styles.ratingContainer}>
-                    <Ionicons name="star" size={16} color="#FFD700" />
+                    <Ionicons name="star" size={14} color="#FFD700" />
                     <Text style={styles.rating}>{product.rating}</Text>
                     <Text style={styles.reviewCount}>({product.reviewCount})</Text>
                 </View>
@@ -56,21 +61,6 @@ const ProductCard = ({ product, onPress }) => {
                         <Text style={styles.originalPrice}>${product.originalPrice}</Text>
                     )}
                 </View>
-
-                <View style={styles.buttonContainer}>
-                    <TouchableOpacity
-                        style={styles.compareButton}
-                        onPress={handleCompare}
-                    >
-                        <Ionicons name="swap-horizontal-outline" size={18} color="#666" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.addToCartButton}
-                        onPress={handleAddToCart}
-                    >
-                        <Text style={styles.addToCartText}>Add to Cart</Text>
-                    </TouchableOpacity>
-                </View>
             </View>
         </TouchableOpacity>
     );
@@ -79,23 +69,24 @@ const ProductCard = ({ product, onPress }) => {
 const styles = StyleSheet.create({
     card: {
         backgroundColor: 'white',
-        borderRadius: 12,
-        margin: 8,
+        borderRadius: 16,
+        padding: 12,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 },
         shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowRadius: 8,
         elevation: 3,
-        width: 160,
+        marginBottom: 8,
     },
     imageContainer: {
         position: 'relative',
+        marginBottom: 12,
     },
     image: {
         width: '100%',
-        height: 120,
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
+        height: 140,
+        borderRadius: 12,
+        backgroundColor: '#F3F4F6',
     },
     wishlistButton: {
         position: 'absolute',
@@ -103,7 +94,7 @@ const styles = StyleSheet.create({
         right: 8,
         backgroundColor: 'white',
         borderRadius: 20,
-        padding: 4,
+        padding: 6,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.2,
@@ -114,29 +105,31 @@ const styles = StyleSheet.create({
         position: 'absolute',
         top: 8,
         left: 8,
-        backgroundColor: '#FF6B6B',
-        paddingHorizontal: 6,
-        paddingVertical: 2,
-        borderRadius: 4,
+        backgroundColor: '#EF4444',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 6,
     },
     discountText: {
         color: 'white',
         fontSize: 10,
-        fontWeight: 'bold',
+        fontWeight: '700',
     },
     content: {
-        padding: 12,
+        flex: 1,
     },
     brand: {
         fontSize: 12,
-        color: '#666',
+        color: '#6B7280',
+        fontWeight: '500',
         marginBottom: 4,
     },
     name: {
         fontSize: 14,
         fontWeight: '600',
+        color: '#1F2937',
         marginBottom: 8,
-        color: '#333',
+        lineHeight: 18,
     },
     ratingContainer: {
         flexDirection: 'row',
@@ -148,51 +141,26 @@ const styles = StyleSheet.create({
         fontWeight: '600',
         marginLeft: 4,
         marginRight: 4,
+        color: '#1F2937',
     },
     reviewCount: {
         fontSize: 12,
-        color: '#666',
+        color: '#9CA3AF',
     },
     priceContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
     },
     price: {
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '700',
         color: '#2563EB',
     },
     originalPrice: {
         fontSize: 12,
-        color: '#999',
+        color: '#9CA3AF',
         textDecorationLine: 'line-through',
         marginLeft: 8,
-    },
-    buttonContainer: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    compareButton: {
-        padding: 6,
-        borderRadius: 6,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    addToCartButton: {
-        backgroundColor: '#2563EB',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 6,
-        flex: 1,
-        marginLeft: 8,
-    },
-    addToCartText: {
-        color: 'white',
-        fontSize: 12,
-        fontWeight: '600',
-        textAlign: 'center',
     },
 });
 
