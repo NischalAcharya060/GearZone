@@ -4,17 +4,37 @@ import {
     Text,
     Image,
     TouchableOpacity,
-    StyleSheet
+    StyleSheet,
+    Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useWishlist } from '../context/WishlistContext';
+import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 const ProductCard = ({ product, onPress }) => {
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
+    const { user } = useAuth();
+    const navigation = useNavigation();
 
     const isWishlisted = isInWishlist(product.id);
 
     const handleWishlistPress = () => {
+        if (!user) {
+            Alert.alert(
+                'Sign In Required',
+                'Please sign in to add items to your wishlist',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Sign In',
+                        onPress: () => navigation.navigate('SignIn')
+                    }
+                ]
+            );
+            return;
+        }
+
         if (isWishlisted) {
             removeFromWishlist(product.id);
         } else {

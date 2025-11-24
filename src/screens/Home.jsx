@@ -11,6 +11,7 @@ import {
     StatusBar,
     Dimensions,
     ScrollView,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,12 +19,14 @@ import { useNavigation } from '@react-navigation/native';
 import ProductCard from '../components/ProductCard';
 import { categories, products, banners } from '../data/mockData';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 
 const { width: screenWidth } = Dimensions.get('window');
 
 const Home = () => {
     const navigation = useNavigation();
     const { getCartItemsCount } = useCart();
+    const { user } = useAuth();
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [searchQuery, setSearchQuery] = useState('');
     const [activeBanner, setActiveBanner] = useState(0);
@@ -48,6 +51,33 @@ const Home = () => {
         return filtered;
     }, [selectedCategory, searchQuery]);
 
+    const handleCartPress = () => {
+        if (!user) {
+            Alert.alert(
+                'Sign In Required',
+                'Please sign in to view your cart',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Sign In',
+                        onPress: () => navigation.navigate('SignIn')
+                    }
+                ]
+            );
+            return;
+        }
+        navigation.navigate('Cart');
+    };
+
+    const handleSearchPress = () => {
+        navigation.navigate('Search');
+    };
+
+    const handleBannerPress = () => {
+        // Navigate to all products when banner is pressed
+        setSelectedCategory('All');
+    };
+
     const BannerItem = ({ banner, index }) => {
         const inputRange = [
             (index - 1) * screenWidth,
@@ -62,22 +92,24 @@ const Home = () => {
         });
 
         return (
-            <Animated.View style={[styles.banner, { opacity }]}>
-                <Image
-                    source={{ uri: banner.image }}
-                    style={styles.bannerImage}
-                    resizeMode="cover"
-                />
-                <View style={styles.bannerGradient}>
-                    <View style={styles.bannerContent}>
-                        <Text style={styles.bannerTitle}>{banner.title}</Text>
-                        <Text style={styles.bannerSubtitle}>{banner.subtitle}</Text>
-                        <TouchableOpacity style={styles.bannerButton}>
-                            <Text style={styles.bannerButtonText}>Shop Now</Text>
-                        </TouchableOpacity>
+            <TouchableOpacity onPress={handleBannerPress}>
+                <Animated.View style={[styles.banner, { opacity }]}>
+                    <Image
+                        source={{ uri: banner.image }}
+                        style={styles.bannerImage}
+                        resizeMode="cover"
+                    />
+                    <View style={styles.bannerGradient}>
+                        <View style={styles.bannerContent}>
+                            <Text style={styles.bannerTitle}>{banner.title}</Text>
+                            <Text style={styles.bannerSubtitle}>{banner.subtitle}</Text>
+                            <TouchableOpacity style={styles.bannerButton}>
+                                <Text style={styles.bannerButtonText}>Shop Now</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
-            </Animated.View>
+                </Animated.View>
+            </TouchableOpacity>
         );
     };
 
@@ -124,19 +156,25 @@ const Home = () => {
             <View style={styles.header}>
                 <View style={styles.headerContent}>
                     <View style={styles.greetingContainer}>
-                        <Text style={styles.greeting}>Good morning! 👋</Text>
-                        <Text style={styles.subtitle}>Find amazing tech deals</Text>
+                        <Text style={styles.greeting}>
+                            {user ? `Hello, ${user.fullName || 'User'}! 👋` : 'Welcome! 👋'}
+                        </Text>
+                        <Text style={styles.subtitle}>
+                            {user ? 'Find amazing tech deals' : 'Browse our electronics collection'}
+                        </Text>
                     </View>
                 </View>
                 <TouchableOpacity
                     style={styles.cartButton}
-                    onPress={() => navigation.navigate('Cart')}
+                    onPress={handleCartPress}
                 >
                     <View style={styles.cartIcon}>
                         <Ionicons name="cart-outline" size={22} color="#2563EB" />
-                        {getCartItemsCount() > 0 && (
+                        {user && getCartItemsCount() > 0 && (
                             <View style={styles.cartBadge}>
-                                <Text style={styles.cartBadgeText}>{getCartItemsCount()}</Text>
+                                <Text style={styles.cartBadgeText}>
+                                    {getCartItemsCount() > 99 ? '99+' : getCartItemsCount()}
+                                </Text>
                             </View>
                         )}
                     </View>
@@ -150,31 +188,22 @@ const Home = () => {
             >
                 {/* Search Bar */}
                 <View style={styles.searchSection}>
-                    <View style={styles.searchContainer}>
+                    <TouchableOpacity
+                        style={styles.searchContainer}
+                        onPress={handleSearchPress}
+                    >
                         <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
-                        <TextInput
-                            style={styles.searchInput}
-                            placeholder="Search headphones, watches, laptops..."
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                            placeholderTextColor="#999"
-                        />
-                        {searchQuery.length > 0 && (
-                            <TouchableOpacity
-                                style={styles.clearButton}
-                                onPress={() => setSearchQuery('')}
-                            >
-                                <Ionicons name="close-circle" size={18} color="#999" />
-                            </TouchableOpacity>
-                        )}
-                    </View>
+                        <Text style={styles.searchPlaceholder}>
+                            Search headphones, watches, laptops...
+                        </Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Banners Section */}
                 <View style={styles.bannerSection}>
                     <View style={styles.sectionHeader}>
                         <Text style={styles.sectionTitle}>Special Offers</Text>
-                        <TouchableOpacity>
+                        <TouchableOpacity onPress={() => setSelectedCategory('All')}>
                             <Text style={styles.seeAllText}>See All</Text>
                         </TouchableOpacity>
                     </View>
@@ -252,9 +281,16 @@ const Home = () => {
                             </Text>
                             <Text style={styles.productCount}>{filteredProducts.length} products</Text>
                         </View>
-                        <TouchableOpacity style={styles.filterButton}>
-                            <Ionicons name="filter" size={18} color="#666" />
-                            <Text style={styles.filterText}>Filter</Text>
+                        <TouchableOpacity
+                            style={styles.filterButton}
+                            onPress={() => {
+                                // Reset filters
+                                setSearchQuery('');
+                                setSelectedCategory('All');
+                            }}
+                        >
+                            <Ionicons name="refresh" size={18} color="#666" />
+                            <Text style={styles.filterText}>Reset</Text>
                         </TouchableOpacity>
                     </View>
 
@@ -381,19 +417,55 @@ const styles = StyleSheet.create({
         borderRadius: 16,
         borderWidth: 1,
         borderColor: '#E5E7EB',
+        paddingVertical: 14,
     },
     searchIcon: {
         marginRight: 12,
     },
-    searchInput: {
+    searchPlaceholder: {
         flex: 1,
-        paddingVertical: 14,
         fontSize: 16,
-        color: '#1F2937',
+        color: '#999',
         fontWeight: '500',
     },
-    clearButton: {
-        padding: 4,
+    loginPrompt: {
+        backgroundColor: '#EFF6FF',
+        marginHorizontal: 20,
+        marginBottom: 16,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#DBEAFE',
+        padding: 16,
+    },
+    loginPromptContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    loginPromptTexts: {
+        flex: 1,
+        marginLeft: 12,
+        marginRight: 16,
+    },
+    loginPromptTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1E40AF',
+        marginBottom: 2,
+    },
+    loginPromptSubtitle: {
+        fontSize: 14,
+        color: '#3B82F6',
+    },
+    loginPromptButton: {
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 8,
+    },
+    loginPromptButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
     },
     bannerSection: {
         marginBottom: 24,

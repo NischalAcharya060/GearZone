@@ -7,10 +7,33 @@ import {
     SafeAreaView,
     Image,
     ScrollView,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuth } from '../context/AuthContext';
+import { useNavigation } from '@react-navigation/native';
 
 const Profile = () => {
+    const { user, logout } = useAuth();
+    const navigation = useNavigation();
+
+    const handleLogout = () => {
+        Alert.alert(
+            'Logout',
+            'Are you sure you want to logout?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Logout',
+                    style: 'destructive',
+                    onPress: async () => {
+                        await logout();
+                    }
+                }
+            ]
+        );
+    };
+
     const menuItems = [
         { icon: 'person-outline', title: 'Personal Information', color: '#2563EB' },
         { icon: 'location-outline', title: 'Addresses', color: '#10B981' },
@@ -19,8 +42,27 @@ const Profile = () => {
         { icon: 'heart-outline', title: 'Wishlist', color: '#EC4899' },
         { icon: 'settings-outline', title: 'Settings', color: '#6B7280' },
         { icon: 'help-circle-outline', title: 'Help & Support', color: '#EF4444' },
-        { icon: 'log-out-outline', title: 'Logout', color: '#DC2626' },
     ];
+
+    if (!user) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.notSignedIn}>
+                    <Ionicons name="person-circle-outline" size={80} color="#CCC" />
+                    <Text style={styles.notSignedInTitle}>Not Signed In</Text>
+                    <Text style={styles.notSignedInText}>
+                        Sign in to access your profile and orders
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.signInButton}
+                        onPress={() => navigation.navigate('SignIn')}
+                    >
+                        <Text style={styles.signInButtonText}>Sign In</Text>
+                    </TouchableOpacity>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     return (
         <SafeAreaView style={styles.container}>
@@ -32,12 +74,15 @@ const Profile = () => {
                             source={{ uri: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150' }}
                             style={styles.avatar}
                         />
-                        <TouchableOpacity style={styles.editButton}>
-                            <Ionicons name="camera-outline" size={16} color="white" />
-                        </TouchableOpacity>
+                        <View style={styles.roleBadge}>
+                            <Text style={styles.roleText}>
+                                {user.role === 'admin' ? 'ADMIN' : 'USER'}
+                            </Text>
+                        </View>
                     </View>
-                    <Text style={styles.userName}>John Doe</Text>
-                    <Text style={styles.userEmail}>john.doe@example.com</Text>
+                    <Text style={styles.userName}>{user.fullName || 'User'}</Text>
+                    <Text style={styles.userEmail}>{user.email}</Text>
+                    <Text style={styles.userPhone}>{user.phone}</Text>
                 </View>
 
                 {/* Stats */}
@@ -58,10 +103,71 @@ const Profile = () => {
                     </View>
                 </View>
 
+                {/* Admin Panel (Only for admin users) */}
+                {user.role === 'admin' && (
+                    <View style={styles.adminSection}>
+                        <Text style={styles.adminTitle}>Admin Panel</Text>
+                        <View style={styles.adminActions}>
+                            <TouchableOpacity
+                                style={styles.adminButton}
+                                onPress={() => navigation.navigate('AddProduct')}
+                            >
+                                <Ionicons name="add-circle-outline" size={20} color="#2563EB" />
+                                <Text style={styles.adminButtonText}>Add Product</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.adminButton}
+                                onPress={() => navigation.navigate('ManageOrders')}
+                            >
+                                <Ionicons name="list-outline" size={20} color="#10B981" />
+                                <Text style={styles.adminButtonText}>Manage Orders</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={styles.adminButton}
+                                onPress={() => navigation.navigate('Analytics')}
+                            >
+                                <Ionicons name="analytics-outline" size={20} color="#F59E0B" />
+                                <Text style={styles.adminButtonText}>Analytics</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                )}
+
                 {/* Menu Items */}
                 <View style={styles.menuContainer}>
                     {menuItems.map((item, index) => (
-                        <TouchableOpacity key={index} style={styles.menuItem}>
+                        <TouchableOpacity
+                            key={index}
+                            style={styles.menuItem}
+                            onPress={() => {
+                                // Add navigation handlers for each menu item
+                                switch(item.title) {
+                                    case 'Personal Information':
+                                        navigation.navigate('PersonalInfo');
+                                        break;
+                                    case 'Addresses':
+                                        navigation.navigate('Addresses');
+                                        break;
+                                    case 'Payment Methods':
+                                        navigation.navigate('PaymentMethods');
+                                        break;
+                                    case 'Order History':
+                                        navigation.navigate('OrderHistory');
+                                        break;
+                                    case 'Wishlist':
+                                        navigation.navigate('Wishlist');
+                                        break;
+                                    case 'Settings':
+                                        navigation.navigate('Settings');
+                                        break;
+                                    case 'Help & Support':
+                                        navigation.navigate('HelpSupport');
+                                        break;
+                                    default:
+                                        break;
+                                }
+                            }}
+                        >
                             <View style={[styles.menuIcon, { backgroundColor: `${item.color}15` }]}>
                                 <Ionicons name={item.icon} size={20} color={item.color} />
                             </View>
@@ -69,6 +175,15 @@ const Profile = () => {
                             <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
                         </TouchableOpacity>
                     ))}
+
+                    {/* Logout Button */}
+                    <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+                        <View style={[styles.menuIcon, { backgroundColor: '#FEE2E2' }]}>
+                            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
+                        </View>
+                        <Text style={[styles.menuTitle, { color: '#DC2626' }]}>Logout</Text>
+                        <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
+                    </TouchableOpacity>
                 </View>
             </ScrollView>
         </SafeAreaView>
@@ -79,6 +194,37 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8FAFC',
+    },
+    notSignedIn: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 40,
+    },
+    notSignedInTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#6B7280',
+        marginTop: 16,
+        marginBottom: 8,
+    },
+    notSignedInText: {
+        fontSize: 16,
+        color: '#9CA3AF',
+        textAlign: 'center',
+        marginBottom: 24,
+        lineHeight: 22,
+    },
+    signInButton: {
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 32,
+        paddingVertical: 12,
+        borderRadius: 8,
+    },
+    signInButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600',
     },
     header: {
         alignItems: 'center',
@@ -96,34 +242,50 @@ const styles = StyleSheet.create({
         height: 100,
         borderRadius: 50,
     },
-    editButton: {
+    roleBadge: {
         position: 'absolute',
         bottom: 0,
         right: 0,
         backgroundColor: '#2563EB',
-        width: 32,
-        height: 32,
-        borderRadius: 16,
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 2,
-        borderColor: 'white',
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        borderRadius: 12,
+    },
+    roleText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
     },
     userName: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#1F2937',
         marginBottom: 4,
     },
     userEmail: {
         fontSize: 16,
-        color: '#666',
+        color: '#6B7280',
+        marginBottom: 2,
+    },
+    userPhone: {
+        fontSize: 14,
+        color: '#9CA3AF',
     },
     statsContainer: {
         flexDirection: 'row',
         backgroundColor: 'white',
         marginTop: 8,
         paddingVertical: 24,
+        marginHorizontal: 16,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
     },
     statItem: {
         flex: 1,
@@ -137,14 +299,71 @@ const styles = StyleSheet.create({
     },
     statLabel: {
         fontSize: 14,
-        color: '#666',
+        color: '#6B7280',
+        fontWeight: '500',
     },
     statDivider: {
         width: 1,
         backgroundColor: '#E5E7EB',
+        height: '60%',
+        alignSelf: 'center',
+    },
+    adminSection: {
+        backgroundColor: 'white',
+        marginTop: 16,
+        marginHorizontal: 16,
+        padding: 20,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
+    },
+    adminTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#1F2937',
+        marginBottom: 16,
+    },
+    adminActions: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+    },
+    adminButton: {
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        flex: 1,
+        marginHorizontal: 4,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    adminButtonText: {
+        fontSize: 12,
+        color: '#374151',
+        fontWeight: '500',
+        marginTop: 4,
+        textAlign: 'center',
     },
     menuContainer: {
-        marginTop: 8,
+        marginTop: 16,
+        marginHorizontal: 16,
+        marginBottom: 16,
+        borderRadius: 12,
+        overflow: 'hidden',
+        shadowColor: '#000',
+        shadowOffset: {
+            width: 0,
+            height: 1,
+        },
+        shadowOpacity: 0.1,
+        shadowRadius: 2,
+        elevation: 2,
     },
     menuItem: {
         flexDirection: 'row',
@@ -165,7 +384,8 @@ const styles = StyleSheet.create({
     menuTitle: {
         flex: 1,
         fontSize: 16,
-        color: '#333',
+        color: '#374151',
+        fontWeight: '500',
     },
 });
 

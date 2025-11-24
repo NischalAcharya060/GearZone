@@ -8,16 +8,45 @@ import {
     SafeAreaView,
     Image,
     ScrollView,
+    Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompare } from '../context/CompareContext';
 import { useCart } from '../context/CartContext';
+import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
 const Compare = () => {
     const { compareItems, removeFromCompare, clearCompare } = useCompare();
     const { addToCart } = useCart();
+    const { user } = useAuth();
     const navigation = useNavigation();
+
+    const showLoginAlert = (action) => {
+        Alert.alert(
+            'Sign In Required',
+            `Please sign in to ${action}`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Sign In',
+                    onPress: () => navigation.navigate('SignIn')
+                }
+            ]
+        );
+    };
+
+    const handleAddToCart = (item) => {
+        if (!user) {
+            showLoginAlert('add items to cart');
+            return;
+        }
+
+        const result = addToCart(item, navigation);
+        if (result && result.success) {
+            Alert.alert('Success', `${item.name} added to cart!`);
+        }
+    };
 
     const CompareItem = ({ item }) => (
         <View style={styles.compareItem}>
@@ -25,26 +54,47 @@ const Compare = () => {
                 style={styles.removeButton}
                 onPress={() => removeFromCompare(item.id)}
             >
-                <Ionicons name="close" size={20} color="#FF6B6B" />
+                <Ionicons name="close-circle" size={20} color="#FF6B6B" />
             </TouchableOpacity>
             <Image source={{ uri: item.image }} style={styles.itemImage} />
-            <Text style={styles.itemName}>{item.name}</Text>
+            <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
             <Text style={styles.itemBrand}>{item.brand}</Text>
             <Text style={styles.itemPrice}>${item.price}</Text>
             <TouchableOpacity
-                style={styles.addToCartButton}
-                onPress={() => addToCart(item)}
+                style={[
+                    styles.addToCartButton,
+                    !user && styles.disabledButton
+                ]}
+                onPress={() => handleAddToCart(item)}
+                disabled={!user}
             >
-                <Text style={styles.addToCartText}>Add to Cart</Text>
+                <Text style={[
+                    styles.addToCartText,
+                    !user && styles.disabledButtonText
+                ]}>
+                    Add to Cart
+                </Text>
             </TouchableOpacity>
         </View>
     );
 
-    const SpecificationRow = ({ title, product1, product2 }) => (
-        <View style={styles.specRow}>
-            <Text style={styles.specTitle}>{title}</Text>
-            <Text style={styles.specValue}>{product1 || '-'}</Text>
-            <Text style={styles.specValue}>{product2 || '-'}</Text>
+    const SpecificationRow = ({ title, product1, product2, isHeader = false }) => (
+        <View style={[
+            styles.specRow,
+            isHeader && styles.specRowHeader
+        ]}>
+            <Text style={[
+                styles.specTitle,
+                isHeader && styles.specTitleHeader
+            ]}>{title}</Text>
+            <Text style={[
+                styles.specValue,
+                isHeader && styles.specValueHeader
+            ]}>{product1 || '-'}</Text>
+            <Text style={[
+                styles.specValue,
+                isHeader && styles.specValueHeader
+            ]}>{product2 || '-'}</Text>
         </View>
     );
 
@@ -52,17 +102,29 @@ const Compare = () => {
         return (
             <SafeAreaView style={styles.container}>
                 <View style={styles.emptyContainer}>
-                    <Ionicons name="swap-horizontal-outline" size={80} color="#CCC" />
+                    <Ionicons name="swap-horizontal-outline" size={80} color="#E5E7EB" />
                     <Text style={styles.emptyTitle}>Compare Products</Text>
                     <Text style={styles.emptySubtitle}>
-                        Add up to 2 products to compare their features and specifications
+                        {user
+                            ? 'Add up to 2 products to compare their features and specifications'
+                            : 'Sign in to compare products and make better purchase decisions'
+                        }
                     </Text>
-                    <TouchableOpacity
-                        style={styles.continueShoppingButton}
-                        onPress={() => navigation.navigate('Home')}
-                    >
-                        <Text style={styles.continueShoppingText}>Browse Products</Text>
-                    </TouchableOpacity>
+                    {!user ? (
+                        <TouchableOpacity
+                            style={styles.signInButton}
+                            onPress={() => navigation.navigate('SignIn')}
+                        >
+                            <Text style={styles.signInButtonText}>Sign In to Compare</Text>
+                        </TouchableOpacity>
+                    ) : (
+                        <TouchableOpacity
+                            style={styles.continueShoppingButton}
+                            onPress={() => navigation.navigate('Home')}
+                        >
+                            <Text style={styles.continueShoppingText}>Browse Products</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </SafeAreaView>
         );
@@ -70,66 +132,159 @@ const Compare = () => {
 
     return (
         <SafeAreaView style={styles.container}>
+            {/* Header */}
             <View style={styles.header}>
+                <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={() => navigation.goBack()}
+                >
+                    <Ionicons name="arrow-back" size={24} color="#333" />
+                </TouchableOpacity>
                 <Text style={styles.title}>Compare Products</Text>
                 <TouchableOpacity onPress={clearCompare}>
                     <Text style={styles.clearText}>Clear All</Text>
                 </TouchableOpacity>
             </View>
 
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            {/* Login Prompt for Non-Logged In Users */}
+            {!user && (
+                <View style={styles.loginPrompt}>
+                    <Ionicons name="information-circle" size={20} color="#2563EB" />
+                    <Text style={styles.loginPromptText}>
+                        Sign in to add compared items to cart
+                    </Text>
+                    <TouchableOpacity
+                        style={styles.loginPromptButton}
+                        onPress={() => navigation.navigate('SignIn')}
+                    >
+                        <Text style={styles.loginPromptButtonText}>Sign In</Text>
+                    </TouchableOpacity>
+                </View>
+            )}
+
+            {/* Comparison Table */}
+            <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={true}
+                style={styles.comparisonScroll}
+            >
                 <View style={styles.compareContainer}>
                     {/* Specification Labels */}
                     <View style={styles.specLabels}>
                         <View style={styles.specLabelHeader} />
-                        <Text style={styles.specLabel}>Price</Text>
-                        <Text style={styles.specLabel}>Brand</Text>
-                        <Text style={styles.specLabel}>Rating</Text>
-                        <Text style={styles.specLabel}>Battery</Text>
-                        <Text style={styles.specLabel}>Connectivity</Text>
-                        <Text style={styles.specLabel}>Features</Text>
+                        <SpecificationRow
+                            title="Price"
+                            product1={compareItems[0] ? `$${compareItems[0].price}` : '-'}
+                            product2={compareItems[1] ? `$${compareItems[1].price}` : '-'}
+                            isHeader={true}
+                        />
+                        <SpecificationRow title="Brand"
+                                          product1={compareItems[0]?.brand || '-'}
+                                          product2={compareItems[1]?.brand || '-'}
+                        />
+                        <SpecificationRow title="Rating"
+                                          product1={compareItems[0] ? `${compareItems[0].rating}/5` : '-'}
+                                          product2={compareItems[1] ? `${compareItems[1].rating}/5` : '-'}
+                        />
+                        <SpecificationRow title="Battery"
+                                          product1={compareItems[0]?.specifications?.battery || '-'}
+                                          product2={compareItems[1]?.specifications?.battery || '-'}
+                        />
+                        <SpecificationRow title="Connectivity"
+                                          product1={compareItems[0]?.specifications?.connectivity || '-'}
+                                          product2={compareItems[1]?.specifications?.connectivity || '-'}
+                        />
+                        <SpecificationRow title="Features"
+                                          product1={compareItems[0]?.specifications?.features?.join(', ') || '-'}
+                                          product2={compareItems[1]?.specifications?.features?.join(', ') || '-'}
+                        />
                     </View>
 
-                    {/* Product 1 */}
-                    {compareItems[0] && (
-                        <View style={styles.productColumn}>
-                            <View style={styles.productHeader}>
-                                <Image source={{ uri: compareItems[0].image }} style={styles.productImage} />
-                                <Text style={styles.productName}>{compareItems[0].name}</Text>
+                    {/* Product Columns */}
+                    <View style={styles.productColumns}>
+                        {/* Product 1 */}
+                        {compareItems[0] && (
+                            <View style={styles.productColumn}>
+                                <View style={styles.productHeader}>
+                                    <Image source={{ uri: compareItems[0].image }} style={styles.productImage} />
+                                    <Text style={styles.productName} numberOfLines={2}>
+                                        {compareItems[0].name}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.productAddToCart,
+                                            !user && styles.disabledButton
+                                        ]}
+                                        onPress={() => handleAddToCart(compareItems[0])}
+                                        disabled={!user}
+                                    >
+                                        <Ionicons
+                                            name="cart-outline"
+                                            size={16}
+                                            color={user ? "white" : "#9CA3AF"}
+                                        />
+                                        <Text style={[
+                                            styles.productAddToCartText,
+                                            !user && styles.disabledButtonText
+                                        ]}>
+                                            Add to Cart
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <Text style={styles.specValue}>${compareItems[0].price}</Text>
-                            <Text style={styles.specValue}>{compareItems[0].brand}</Text>
-                            <Text style={styles.specValue}>{compareItems[0].rating}/5</Text>
-                            <Text style={styles.specValue}>{compareItems[0].specifications.battery || '-'}</Text>
-                            <Text style={styles.specValue}>{compareItems[0].specifications.connectivity || '-'}</Text>
-                            <Text style={styles.specValue}>
-                                {compareItems[0].specifications.features?.join(', ') || '-'}
-                            </Text>
-                        </View>
-                    )}
+                        )}
 
-                    {/* Product 2 */}
-                    {compareItems[1] && (
-                        <View style={styles.productColumn}>
-                            <View style={styles.productHeader}>
-                                <Image source={{ uri: compareItems[1].image }} style={styles.productImage} />
-                                <Text style={styles.productName}>{compareItems[1].name}</Text>
+                        {/* Product 2 */}
+                        {compareItems[1] && (
+                            <View style={styles.productColumn}>
+                                <View style={styles.productHeader}>
+                                    <Image source={{ uri: compareItems[1].image }} style={styles.productImage} />
+                                    <Text style={styles.productName} numberOfLines={2}>
+                                        {compareItems[1].name}
+                                    </Text>
+                                    <TouchableOpacity
+                                        style={[
+                                            styles.productAddToCart,
+                                            !user && styles.disabledButton
+                                        ]}
+                                        onPress={() => handleAddToCart(compareItems[1])}
+                                        disabled={!user}
+                                    >
+                                        <Ionicons
+                                            name="cart-outline"
+                                            size={16}
+                                            color={user ? "white" : "#9CA3AF"}
+                                        />
+                                        <Text style={[
+                                            styles.productAddToCartText,
+                                            !user && styles.disabledButtonText
+                                        ]}>
+                                            Add to Cart
+                                        </Text>
+                                    </TouchableOpacity>
+                                </View>
                             </View>
-                            <Text style={styles.specValue}>${compareItems[1].price}</Text>
-                            <Text style={styles.specValue}>{compareItems[1].brand}</Text>
-                            <Text style={styles.specValue}>{compareItems[1].rating}/5</Text>
-                            <Text style={styles.specValue}>{compareItems[1].specifications.battery || '-'}</Text>
-                            <Text style={styles.specValue}>{compareItems[1].specifications.connectivity || '-'}</Text>
-                            <Text style={styles.specValue}>
-                                {compareItems[1].specifications.features?.join(', ') || '-'}
-                            </Text>
-                        </View>
-                    )}
+                        )}
+                    </View>
                 </View>
             </ScrollView>
 
+            {/* Products List */}
             <View style={styles.productsList}>
-                <Text style={styles.productsTitle}>Products to Compare</Text>
+                <View style={styles.productsHeader}>
+                    <Text style={styles.productsTitle}>
+                        Products to Compare ({compareItems.length}/2)
+                    </Text>
+                    {compareItems.length < 2 && (
+                        <TouchableOpacity
+                            style={styles.addMoreButton}
+                            onPress={() => navigation.navigate('Home')}
+                        >
+                            <Ionicons name="add" size={16} color="#2563EB" />
+                            <Text style={styles.addMoreText}>Add More</Text>
+                        </TouchableOpacity>
+                    )}
+                </View>
                 <FlatList
                     data={compareItems}
                     horizontal
@@ -157,37 +312,97 @@ const styles = StyleSheet.create({
         borderBottomWidth: 1,
         borderBottomColor: '#E5E7EB',
     },
+    backButton: {
+        padding: 4,
+    },
     title: {
         fontSize: 20,
         fontWeight: 'bold',
         color: '#333',
     },
     clearText: {
-        color: '#FF6B6B',
+        color: '#EF4444',
         fontSize: 16,
         fontWeight: '600',
+    },
+    loginPrompt: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EFF6FF',
+        padding: 12,
+        marginHorizontal: 16,
+        marginTop: 16,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#DBEAFE',
+    },
+    loginPromptText: {
+        flex: 1,
+        fontSize: 14,
+        color: '#1E40AF',
+        marginLeft: 8,
+        marginRight: 12,
+    },
+    loginPromptButton: {
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+    },
+    loginPromptButtonText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '600',
+    },
+    comparisonScroll: {
+        flex: 1,
     },
     compareContainer: {
         flexDirection: 'row',
         padding: 16,
+        minWidth: '100%',
     },
     specLabels: {
         width: 120,
         marginRight: 16,
     },
     specLabelHeader: {
-        height: 150,
+        height: 180,
         marginBottom: 8,
     },
-    specLabel: {
+    specRow: {
+        flexDirection: 'row',
+        marginBottom: 12,
+    },
+    specRowHeader: {
+        backgroundColor: '#F3F4F6',
+        borderRadius: 8,
+        paddingVertical: 12,
+    },
+    specTitle: {
         fontSize: 14,
+        fontWeight: '500',
+        color: '#6B7280',
+        width: 120,
+    },
+    specTitleHeader: {
         fontWeight: '600',
-        color: '#666',
-        marginBottom: 16,
-        paddingVertical: 8,
-        backgroundColor: 'white',
-        paddingHorizontal: 8,
-        borderRadius: 6,
+        color: '#374151',
+    },
+    specValue: {
+        fontSize: 14,
+        color: '#374151',
+        fontWeight: '500',
+        width: 200,
+        marginLeft: 16,
+        textAlign: 'center',
+    },
+    specValueHeader: {
+        fontWeight: '600',
+        color: '#1F2937',
+    },
+    productColumns: {
+        flexDirection: 'row',
     },
     productColumn: {
         width: 200,
@@ -199,41 +414,74 @@ const styles = StyleSheet.create({
         padding: 16,
         marginBottom: 8,
         alignItems: 'center',
-        height: 150,
-        justifyContent: 'center',
+        height: 180,
+        justifyContent: 'space-between',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 3,
     },
     productImage: {
         width: 80,
         height: 80,
         borderRadius: 8,
-        marginBottom: 8,
     },
     productName: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#333',
+        color: '#1F2937',
         textAlign: 'center',
+        marginVertical: 8,
     },
-    specValue: {
-        fontSize: 14,
-        color: '#333',
-        marginBottom: 16,
+    productAddToCart: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 12,
         paddingVertical: 8,
-        backgroundColor: 'white',
-        paddingHorizontal: 8,
         borderRadius: 6,
-        textAlign: 'center',
+        width: '100%',
+        justifyContent: 'center',
+    },
+    productAddToCartText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '600',
+        marginLeft: 6,
     },
     productsList: {
         borderTopWidth: 1,
         borderTopColor: '#E5E7EB',
         padding: 16,
+        backgroundColor: 'white',
+    },
+    productsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 12,
     },
     productsTitle: {
         fontSize: 18,
         fontWeight: 'bold',
-        marginBottom: 12,
-        color: '#333',
+        color: '#1F2937',
+    },
+    addMoreButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EFF6FF',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+        borderWidth: 1,
+        borderColor: '#2563EB',
+    },
+    addMoreText: {
+        color: '#2563EB',
+        fontSize: 14,
+        fontWeight: '600',
+        marginLeft: 4,
     },
     productsContent: {
         paddingBottom: 8,
@@ -250,12 +498,22 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 4,
         elevation: 3,
+        borderWidth: 1,
+        borderColor: '#F3F4F6',
     },
     removeButton: {
         position: 'absolute',
         top: 8,
         right: 8,
         zIndex: 1,
+        backgroundColor: 'white',
+        borderRadius: 12,
+        padding: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
+        elevation: 2,
     },
     itemImage: {
         width: 80,
@@ -286,11 +544,20 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 6,
         borderRadius: 6,
+        width: '100%',
     },
     addToCartText: {
         color: 'white',
         fontSize: 12,
         fontWeight: '600',
+        textAlign: 'center',
+    },
+    disabledButton: {
+        backgroundColor: '#F3F4F6',
+        borderColor: '#D1D5DB',
+    },
+    disabledButtonText: {
+        color: '#9CA3AF',
     },
     emptyContainer: {
         flex: 1,
@@ -301,15 +568,27 @@ const styles = StyleSheet.create({
     emptyTitle: {
         fontSize: 24,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#1F2937',
         marginTop: 16,
         marginBottom: 8,
     },
     emptySubtitle: {
         fontSize: 16,
-        color: '#666',
+        color: '#6B7280',
         textAlign: 'center',
         marginBottom: 24,
+        lineHeight: 22,
+    },
+    signInButton: {
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 32,
+        paddingVertical: 12,
+        borderRadius: 8,
+    },
+    signInButtonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600',
     },
     continueShoppingButton: {
         backgroundColor: '#2563EB',

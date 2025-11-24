@@ -8,12 +8,14 @@ import {
     StyleSheet,
     Dimensions,
     FlatList,
+    Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
+import { useAuth } from '../context/AuthContext';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -25,6 +27,7 @@ const ProductDetail = ({ route, navigation }) => {
     const { addToCart } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
     const { addToCompare, canAddToCompare } = useCompare();
+    const { user } = useAuth();
 
     const isWishlisted = isInWishlist(product.id);
 
@@ -36,31 +39,77 @@ const ProductDetail = ({ route, navigation }) => {
         'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=500',
     ];
 
+    const showLoginAlert = (action) => {
+        Alert.alert(
+            'Sign In Required',
+            `Please sign in to ${action}`,
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Sign In',
+                    onPress: () => navigation.navigate('SignIn')
+                }
+            ]
+        );
+    };
+
     const handleAddToCart = () => {
+        if (!user) {
+            showLoginAlert('add items to cart');
+            return;
+        }
+
         for (let i = 0; i < quantity; i++) {
             addToCart(product);
         }
-        alert(`${quantity} ${product.name} added to cart!`);
+        Alert.alert('Success', `${quantity} ${product.name} added to cart!`);
     };
 
     const handleWishlistToggle = () => {
+        if (!user) {
+            showLoginAlert('add items to wishlist');
+            return;
+        }
+
         if (isWishlisted) {
             removeFromWishlist(product.id);
+            Alert.alert('Removed', 'Product removed from wishlist');
         } else {
             addToWishlist(product);
+            Alert.alert('Added', 'Product added to wishlist');
         }
     };
 
     const handleAddToCompare = () => {
+        if (!user) {
+            showLoginAlert('compare products');
+            return;
+        }
+
         if (canAddToCompare()) {
             addToCompare(product);
-            alert('Product added to compare!');
+            Alert.alert('Success', 'Product added to compare!');
         } else {
-            alert('You can only compare 2 products at a time. Remove one to add another.');
+            Alert.alert(
+                'Limit Reached',
+                'You can only compare 2 products at a time. Remove one to add another.',
+                [
+                    { text: 'OK', style: 'default' },
+                    {
+                        text: 'View Compare',
+                        onPress: () => navigation.navigate('CompareTab')
+                    }
+                ]
+            );
         }
     };
 
     const handleBuyNow = () => {
+        if (!user) {
+            showLoginAlert('proceed with purchase');
+            return;
+        }
+
         handleAddToCart();
         navigation.navigate('Cart');
     };
@@ -109,7 +158,10 @@ const ProductDetail = ({ route, navigation }) => {
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Product Details</Text>
-                <TouchableOpacity style={styles.wishlistButton} onPress={handleWishlistToggle}>
+                <TouchableOpacity
+                    style={styles.wishlistButton}
+                    onPress={handleWishlistToggle}
+                >
                     <Ionicons
                         name={isWishlisted ? "heart" : "heart-outline"}
                         size={24}
@@ -174,27 +226,45 @@ const ProductDetail = ({ route, navigation }) => {
                     </View>
 
                     <Text style={styles.description}>{product.description}</Text>
+
+                    {/* Login Prompt for Non-Logged In Users */}
+                    {!user && (
+                        <View style={styles.loginPrompt}>
+                            <Ionicons name="log-in-outline" size={20} color="#2563EB" />
+                            <Text style={styles.loginPromptText}>
+                                Sign in to add to cart, wishlist, or compare
+                            </Text>
+                            <TouchableOpacity
+                                style={styles.loginPromptButton}
+                                onPress={() => navigation.navigate('SignIn')}
+                            >
+                                <Text style={styles.loginPromptButtonText}>Sign In</Text>
+                            </TouchableOpacity>
+                        </View>
+                    )}
                 </View>
 
-                {/* Quantity Selector */}
-                <View style={styles.quantitySection}>
-                    <Text style={styles.sectionTitle}>Quantity</Text>
-                    <View style={styles.quantitySelector}>
-                        <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={decreaseQuantity}
-                        >
-                            <Ionicons name="remove" size={20} color="#333" />
-                        </TouchableOpacity>
-                        <Text style={styles.quantityText}>{quantity}</Text>
-                        <TouchableOpacity
-                            style={styles.quantityButton}
-                            onPress={increaseQuantity}
-                        >
-                            <Ionicons name="add" size={20} color="#333" />
-                        </TouchableOpacity>
+                {/* Quantity Selector - Only show for logged in users */}
+                {user && (
+                    <View style={styles.quantitySection}>
+                        <Text style={styles.sectionTitle}>Quantity</Text>
+                        <View style={styles.quantitySelector}>
+                            <TouchableOpacity
+                                style={styles.quantityButton}
+                                onPress={decreaseQuantity}
+                            >
+                                <Ionicons name="remove" size={20} color="#333" />
+                            </TouchableOpacity>
+                            <Text style={styles.quantityText}>{quantity}</Text>
+                            <TouchableOpacity
+                                style={styles.quantityButton}
+                                onPress={increaseQuantity}
+                            >
+                                <Ionicons name="add" size={20} color="#333" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
+                )}
 
                 {/* Specifications */}
                 <View style={styles.specsSection}>
@@ -227,26 +297,61 @@ const ProductDetail = ({ route, navigation }) => {
             {/* Fixed Action Buttons */}
             <View style={styles.actionButtons}>
                 <TouchableOpacity
-                    style={styles.compareButton}
+                    style={[
+                        styles.compareButton,
+                        !user && styles.disabledButton
+                    ]}
                     onPress={handleAddToCompare}
+                    disabled={!user}
                 >
-                    <Ionicons name="swap-horizontal" size={20} color="#2563EB" />
-                    <Text style={styles.compareButtonText}>Compare</Text>
+                    <Ionicons
+                        name="swap-horizontal"
+                        size={20}
+                        color={user ? "#2563EB" : "#9CA3AF"}
+                    />
+                    <Text style={[
+                        styles.compareButtonText,
+                        !user && styles.disabledButtonText
+                    ]}>
+                        Compare
+                    </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={styles.addToCartButton}
+                    style={[
+                        styles.addToCartButton,
+                        !user && styles.disabledButton
+                    ]}
                     onPress={handleAddToCart}
+                    disabled={!user}
                 >
-                    <Ionicons name="cart-outline" size={20} color="white" />
-                    <Text style={styles.addToCartButtonText}>Add to Cart</Text>
+                    <Ionicons
+                        name="cart-outline"
+                        size={20}
+                        color={user ? "white" : "#9CA3AF"}
+                    />
+                    <Text style={[
+                        styles.addToCartButtonText,
+                        !user && styles.disabledButtonText
+                    ]}>
+                        Add to Cart
+                    </Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                    style={styles.buyNowButton}
+                    style={[
+                        styles.buyNowButton,
+                        !user && styles.disabledButton
+                    ]}
                     onPress={handleBuyNow}
+                    disabled={!user}
                 >
-                    <Text style={styles.buyNowButtonText}>Buy Now</Text>
+                    <Text style={[
+                        styles.buyNowButtonText,
+                        !user && styles.disabledButtonText
+                    ]}>
+                        Buy Now
+                    </Text>
                 </TouchableOpacity>
             </View>
         </SafeAreaView>
@@ -373,6 +478,34 @@ const styles = StyleSheet.create({
         fontSize: 16,
         lineHeight: 24,
         color: '#666',
+        marginBottom: 16,
+    },
+    loginPrompt: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#EFF6FF',
+        padding: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#DBEAFE',
+    },
+    loginPromptText: {
+        flex: 1,
+        fontSize: 14,
+        color: '#1E40AF',
+        marginLeft: 8,
+        marginRight: 12,
+    },
+    loginPromptButton: {
+        backgroundColor: '#2563EB',
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 6,
+    },
+    loginPromptButtonText: {
+        color: 'white',
+        fontSize: 12,
+        fontWeight: '600',
     },
     quantitySection: {
         backgroundColor: 'white',
@@ -519,6 +652,13 @@ const styles = StyleSheet.create({
     buyNowButtonText: {
         color: 'white',
         fontWeight: 'bold',
+    },
+    disabledButton: {
+        backgroundColor: '#F3F4F6',
+        borderColor: '#D1D5DB',
+    },
+    disabledButtonText: {
+        color: '#9CA3AF',
     },
 });
 

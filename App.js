@@ -5,6 +5,7 @@ import { createStackNavigator } from '@react-navigation/stack';
 import { Ionicons } from '@expo/vector-icons';
 
 // Context Providers
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { CartProvider } from './src/context/CartContext';
 import { WishlistProvider } from './src/context/WishlistContext';
 import { CompareProvider } from './src/context/CompareContext';
@@ -16,7 +17,10 @@ import Cart from './src/screens/Cart';
 import Wishlist from './src/screens/Wishlist';
 import Compare from './src/screens/Compare';
 import Profile from './src/screens/Profile';
-import Checkout from "./src/screens/Checkout";
+import Checkout from './src/screens/Checkout';
+import SignIn from './src/screens/SignIn';
+import SignUp from './src/screens/SignUp';
+import LoadingScreen from './src/screens/LoadingScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -51,6 +55,14 @@ const CartStack = () => {
                 component={Cart}
                 options={{ headerShown: false }}
             />
+            <Stack.Screen
+                name="Checkout"
+                component={Checkout}
+                options={{
+                    title: 'Checkout',
+                    headerBackTitle: 'Back'
+                }}
+            />
         </Stack.Navigator>
     );
 };
@@ -65,7 +77,7 @@ const WishlistStack = () => {
                 options={{ headerShown: false }}
             />
             <Stack.Screen
-                name="ProductDetailFromWishlist"
+                name="ProductDetail"
                 component={ProductDetail}
                 options={{
                     title: 'Product Details',
@@ -85,6 +97,14 @@ const CompareStack = () => {
                 component={Compare}
                 options={{ headerShown: false }}
             />
+            <Stack.Screen
+                name="ProductDetail"
+                component={ProductDetail}
+                options={{
+                    title: 'Product Details',
+                    headerBackTitle: 'Back'
+                }}
+            />
         </Stack.Navigator>
     );
 };
@@ -102,8 +122,8 @@ const ProfileStack = () => {
     );
 };
 
-// Bottom Tab Navigator
-const TabNavigator = () => {
+// Main App Tabs (for logged-in users)
+const MainTabs = () => {
     return (
         <Tab.Navigator
             screenOptions={{
@@ -157,6 +177,17 @@ const TabNavigator = () => {
                 }}
             />
             <Tab.Screen
+                name="CartTab"
+                component={CartStack}
+                options={{
+                    tabBarLabel: 'Cart',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="cart-outline" size={size} color={color} />
+                    ),
+                    headerShown: false,
+                }}
+            />
+            <Tab.Screen
                 name="ProfileTab"
                 component={ProfileStack}
                 options={{
@@ -171,45 +202,52 @@ const TabNavigator = () => {
     );
 };
 
-// Main Stack Navigator (for modals and other screens)
-const MainStack = () => {
+// Auth Stack (for non-logged-in users)
+const AuthStack = () => {
     return (
-        <Stack.Navigator>
-            <Stack.Screen
-                name="MainTabs"
-                component={TabNavigator}
-                options={{ headerShown: false }}
-            />
-            <Stack.Screen
-                name="Cart"
-                component={Cart}
-                options={{
-                    title: 'Shopping Cart',
-                    headerBackTitle: 'Back'
-                }}
-            />
-            <Stack.Screen
-                name="Checkout"
-                component={Checkout}
-                options={{
-                    title: 'Checkout',
-                    headerBackTitle: 'Back'
-                }}
-            />
+        <Stack.Navigator screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="SignIn" component={SignIn} />
+            <Stack.Screen name="SignUp" component={SignUp} />
         </Stack.Navigator>
     );
 };
 
+// Root Navigator - Handles authentication state
+const RootNavigator = () => {
+    const { user, loading } = useAuth();
+
+    console.log('RootNavigator - Auth state:', { user: user?.email, loading });
+
+    if (loading) {
+        return <LoadingScreen />;
+    }
+
+    return (
+        <NavigationContainer>
+            <Stack.Navigator screenOptions={{ headerShown: false }}>
+                {user ? (
+                    // User is signed in - show main app
+                    <Stack.Screen name="MainApp" component={MainTabs} />
+                ) : (
+                    // User is not signed in - show auth flow
+                    <Stack.Screen name="Auth" component={AuthStack} />
+                )}
+            </Stack.Navigator>
+        </NavigationContainer>
+    );
+};
+
+// App Component
 export default function App() {
     return (
-        <CartProvider>
-            <WishlistProvider>
-                <CompareProvider>
-                    <NavigationContainer>
-                        <MainStack />
-                    </NavigationContainer>
-                </CompareProvider>
-            </WishlistProvider>
-        </CartProvider>
+        <AuthProvider>
+            <CartProvider>
+                <WishlistProvider>
+                    <CompareProvider>
+                        <RootNavigator />
+                    </CompareProvider>
+                </WishlistProvider>
+            </CartProvider>
+        </AuthProvider>
     );
 }
