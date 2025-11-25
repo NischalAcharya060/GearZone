@@ -30,7 +30,8 @@ const SignIn = () => {
     useEffect(() => {
         if (user) {
             console.log('User already logged in, redirecting...');
-            navigation.replace('MainTabs');
+            // Use replace to prevent going back to auth screens
+            navigation.replace('MainApp');
         }
     }, [user, navigation]);
 
@@ -70,16 +71,23 @@ const SignIn = () => {
 
         if (result.success) {
             console.log('Sign in successful, user should be redirected automatically');
-            // Navigation will be handled by the auth state change
+            // Navigation will be handled by the auth state change and useEffect above
+        } else {
+            // Show error if sign in failed
+            if (result.error) {
+                Alert.alert('Sign In Failed', result.error);
+            }
         }
     };
 
     const handleBack = () => {
-        // Try to go back, if cannot then navigate to home
+        // Try to go back, if cannot then navigate to appropriate screen
         if (navigation.canGoBack()) {
             navigation.goBack();
         } else {
-            navigation.navigate('Home'); // or 'MainTabs' depending on your app structure
+            // If no back screen, navigate to home or welcome screen
+            // Since we're in auth flow, we can navigate to the main app
+            navigation.navigate('MainApp');
         }
     };
 

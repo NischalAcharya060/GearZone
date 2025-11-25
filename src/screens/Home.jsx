@@ -139,13 +139,13 @@ const Home = () => {
                     { text: 'Cancel', style: 'cancel' },
                     {
                         text: 'Sign In',
-                        onPress: () => navigation.navigate('SignIn')
+                        onPress: () => navigation.navigate('ProfileTab', { screen: 'SignIn' })
                     }
                 ]
             );
             return;
         }
-        navigation.navigate('Cart');
+        navigation.navigate('CartTab');
     };
 
     const handleSearchPress = () => {
@@ -276,15 +276,11 @@ const Home = () => {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
                 refreshControl={
-                    <ScrollView
-                        refreshControl={
-                            <RefreshControl
-                                refreshing={loading}
-                                onRefresh={fetchData}
-                                colors={['#2563EB']}
-                                tintColor="#2563EB"
-                            />
-                        }
+                    <RefreshControl
+                        refreshing={loading}
+                        onRefresh={fetchData}
+                        colors={['#2563EB']}
+                        tintColor="#2563EB"
                     />
                 }
             >

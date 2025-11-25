@@ -21,6 +21,7 @@ import Checkout from './src/screens/Checkout';
 import SignIn from './src/screens/SignIn';
 import SignUp from './src/screens/SignUp';
 import LoadingScreen from './src/screens/LoadingScreen';
+import Search from './src/screens/Search';
 
 // Admin Screens
 import AddProduct from './src/screens/admin/AddProduct';
@@ -36,7 +37,7 @@ const HomeStack = () => {
     return (
         <Stack.Navigator>
             <Stack.Screen
-                name="HomeMain"
+                name="Home"
                 component={Home}
                 options={{ headerShown: false }}
             />
@@ -45,6 +46,14 @@ const HomeStack = () => {
                 component={ProductDetail}
                 options={{
                     title: 'Product Details',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <Stack.Screen
+                name="Search"
+                component={Search}
+                options={{
+                    title: 'Search Products',
                     headerBackTitle: 'Back'
                 }}
             />
@@ -57,7 +66,7 @@ const CartStack = () => {
     return (
         <Stack.Navigator>
             <Stack.Screen
-                name="CartMain"
+                name="Cart"
                 component={Cart}
                 options={{ headerShown: false }}
             />
@@ -78,7 +87,7 @@ const WishlistStack = () => {
     return (
         <Stack.Navigator>
             <Stack.Screen
-                name="WishlistMain"
+                name="Wishlist"
                 component={Wishlist}
                 options={{ headerShown: false }}
             />
@@ -99,7 +108,7 @@ const CompareStack = () => {
     return (
         <Stack.Navigator>
             <Stack.Screen
-                name="CompareMain"
+                name="Compare"
                 component={Compare}
                 options={{ headerShown: false }}
             />
@@ -122,8 +131,18 @@ const ProfileStack = () => {
     return (
         <Stack.Navigator>
             <Stack.Screen
-                name="ProfileMain"
+                name="Profile"
                 component={Profile}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="SignIn"
+                component={SignIn}
+                options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="SignUp"
+                component={SignUp}
                 options={{ headerShown: false }}
             />
             {/* Admin Only Screens */}
@@ -253,6 +272,7 @@ const AuthStack = () => {
         <Stack.Navigator screenOptions={{ headerShown: false }}>
             <Stack.Screen name="SignIn" component={SignIn} />
             <Stack.Screen name="SignUp" component={SignUp} />
+            <Stack.Screen name="MainApp" component={MainTabs} />
         </Stack.Navigator>
     );
 };

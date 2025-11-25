@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -17,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 
 const SignUp = () => {
     const navigation = useNavigation();
-    const { signUp } = useAuth();
+    const { signUp, user } = useAuth();
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -30,6 +30,14 @@ const SignUp = () => {
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
+    // Redirect if user is already logged in
+    useEffect(() => {
+        if (user) {
+            console.log('User already logged in, redirecting...');
+            navigation.replace('MainApp');
+        }
+    }, [user, navigation]);
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -63,7 +71,7 @@ const SignUp = () => {
         }
 
         if (!formData.phone.match(/^\d{10,15}$/)) {
-            return 'Please enter a valid phone number';
+            return 'Please enter a valid phone number (10-15 digits)';
         }
 
         return null;
@@ -78,19 +86,35 @@ const SignUp = () => {
 
         setLoading(true);
 
-        const result = await signUp(formData.email, formData.password, {
-            fullName: formData.fullName,
-            phone: formData.phone,
-            role: formData.role,
-        });
+        try {
+            const result = await signUp(formData.email, formData.password, {
+                fullName: formData.fullName,
+                phone: formData.phone,
+                role: formData.role,
+            });
 
-        setLoading(false);
+            if (result.success) {
+                Alert.alert(
+                    'Success',
+                    'Account created successfully!',
+                    [{ text: 'OK', onPress: () => console.log('Account created') }]
+                );
+                // Navigation will be handled by auth state change and useEffect above
+            } else {
+                Alert.alert('Error', result.error || 'Failed to create account');
+            }
+        } catch (error) {
+            Alert.alert('Error', 'An unexpected error occurred');
+        } finally {
+            setLoading(false);
+        }
+    };
 
-        if (result.success) {
-            Alert.alert('Success', 'Account created successfully!');
-            // Navigation will be handled by auth state change
+    const handleBack = () => {
+        if (navigation.canGoBack()) {
+            navigation.goBack();
         } else {
-            Alert.alert('Error', result.error || 'Failed to create account');
+            navigation.navigate('SignIn');
         }
     };
 
@@ -121,12 +145,15 @@ const SignUp = () => {
                 style={styles.keyboardView}
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             >
-                <ScrollView contentContainerStyle={styles.scrollContent}>
+                <ScrollView
+                    contentContainerStyle={styles.scrollContent}
+                    showsVerticalScrollIndicator={false}
+                >
                     {/* Header */}
                     <View style={styles.header}>
                         <TouchableOpacity
                             style={styles.backButton}
-                            onPress={() => navigation.goBack()}
+                            onPress={handleBack}
                         >
                             <Ionicons name="arrow-back" size={24} color="#333" />
                         </TouchableOpacity>
@@ -155,6 +182,8 @@ const SignUp = () => {
                                         value={formData.fullName}
                                         onChangeText={(text) => handleInputChange('fullName', text)}
                                         placeholderTextColor="#999"
+                                        autoCapitalize="words"
+                                        autoComplete="name"
                                     />
                                 </View>
                             </View>
@@ -171,6 +200,7 @@ const SignUp = () => {
                                         keyboardType="email-address"
                                         autoCapitalize="none"
                                         placeholderTextColor="#999"
+                                        autoComplete="email"
                                     />
                                 </View>
                             </View>
@@ -186,6 +216,7 @@ const SignUp = () => {
                                         onChangeText={(text) => handleInputChange('phone', text)}
                                         keyboardType="phone-pad"
                                         placeholderTextColor="#999"
+                                        autoComplete="tel"
                                     />
                                 </View>
                             </View>
@@ -220,6 +251,7 @@ const SignUp = () => {
                                         onChangeText={(text) => handleInputChange('password', text)}
                                         secureTextEntry={!showPassword}
                                         placeholderTextColor="#999"
+                                        autoComplete="new-password"
                                     />
                                     <TouchableOpacity
                                         style={styles.eyeButton}
@@ -248,6 +280,7 @@ const SignUp = () => {
                                         onChangeText={(text) => handleInputChange('confirmPassword', text)}
                                         secureTextEntry={!showConfirmPassword}
                                         placeholderTextColor="#999"
+                                        autoComplete="new-password"
                                     />
                                     <TouchableOpacity
                                         style={styles.eyeButton}

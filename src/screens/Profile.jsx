@@ -27,7 +27,12 @@ const Profile = () => {
                     text: 'Logout',
                     style: 'destructive',
                     onPress: async () => {
-                        await logout();
+                        try {
+                            await logout();
+                            navigation.navigate('HomeTab');
+                        } catch (error) {
+                            Alert.alert('Error', 'Failed to logout. Please try again.');
+                        }
                     }
                 }
             ]
@@ -104,7 +109,6 @@ const Profile = () => {
                 </View>
 
                 {/* Admin Panel (Only for admin users) */}
-                // In Profile.js - Update the admin buttons section
                 {user?.role === 'admin' && (
                     <View style={styles.adminSection}>
                         <Text style={styles.adminTitle}>Admin Panel</Text>
@@ -151,25 +155,31 @@ const Profile = () => {
                                 // Add navigation handlers for each menu item
                                 switch(item.title) {
                                     case 'Personal Information':
-                                        navigation.navigate('PersonalInfo');
+                                        // navigation.navigate('PersonalInfo');
+                                        Alert.alert('Coming Soon', 'Personal Information feature coming soon!');
                                         break;
                                     case 'Addresses':
-                                        navigation.navigate('Addresses');
+                                        // navigation.navigate('Addresses');
+                                        Alert.alert('Coming Soon', 'Addresses feature coming soon!');
                                         break;
                                     case 'Payment Methods':
-                                        navigation.navigate('PaymentMethods');
+                                        // navigation.navigate('PaymentMethods');
+                                        Alert.alert('Coming Soon', 'Payment Methods feature coming soon!');
                                         break;
                                     case 'Order History':
-                                        navigation.navigate('OrderHistory');
+                                        // navigation.navigate('OrderHistory');
+                                        Alert.alert('Coming Soon', 'Order History feature coming soon!');
                                         break;
                                     case 'Wishlist':
-                                        navigation.navigate('Wishlist');
+                                        navigation.navigate('WishlistTab');
                                         break;
                                     case 'Settings':
-                                        navigation.navigate('Settings');
+                                        // navigation.navigate('Settings');
+                                        Alert.alert('Coming Soon', 'Settings feature coming soon!');
                                         break;
                                     case 'Help & Support':
-                                        navigation.navigate('HelpSupport');
+                                        // navigation.navigate('HelpSupport');
+                                        Alert.alert('Coming Soon', 'Help & Support feature coming soon!');
                                         break;
                                     default:
                                         break;
@@ -228,11 +238,25 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
         paddingVertical: 12,
         borderRadius: 8,
+        marginBottom: 12,
     },
     signInButtonText: {
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
+    },
+    backToHomeButton: {
+        backgroundColor: '#F3F4F6',
+        paddingHorizontal: 32,
+        paddingVertical: 12,
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    backToHomeButtonText: {
+        color: '#374151',
+        fontSize: 16,
+        fontWeight: '500',
     },
     header: {
         alignItems: 'center',
