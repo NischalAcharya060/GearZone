@@ -25,37 +25,48 @@ const Cart = () => {
         navigation.navigate('Checkout');
     };
 
-    const CartItem = ({ item }) => (
-        <View style={styles.cartItem}>
-            <Image source={{ uri: item.image }} style={styles.itemImage} />
-            <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemBrand}>{item.brand}</Text>
-                <Text style={styles.itemPrice}>${item.price}</Text>
-                <View style={styles.quantityContainer}>
-                    <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => updateQuantity(item.id, item.quantity - 1)}
-                    >
-                        <Ionicons name="remove" size={16} color="#333" />
-                    </TouchableOpacity>
-                    <Text style={styles.quantityText}>{item.quantity}</Text>
-                    <TouchableOpacity
-                        style={styles.quantityButton}
-                        onPress={() => updateQuantity(item.id, item.quantity + 1)}
-                    >
-                        <Ionicons name="add" size={16} color="#333" />
-                    </TouchableOpacity>
+    const CartItem = ({ item }) => {
+        // Get the first image from the images array or use a fallback
+        const productImage = item.images && item.images.length > 0
+            ? item.images[0]
+            : 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=500&h=500&fit=crop';
+
+        return (
+            <View style={styles.cartItem}>
+                <Image
+                    source={{ uri: productImage }}
+                    style={styles.itemImage}
+                    resizeMode="cover"
+                />
+                <View style={styles.itemDetails}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemBrand}>{item.brand}</Text>
+                    <Text style={styles.itemPrice}>${item.price}</Text>
+                    <View style={styles.quantityContainer}>
+                        <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => updateQuantity(item.id, item.quantity - 1)}
+                        >
+                            <Ionicons name="remove" size={16} color="#333" />
+                        </TouchableOpacity>
+                        <Text style={styles.quantityText}>{item.quantity}</Text>
+                        <TouchableOpacity
+                            style={styles.quantityButton}
+                            onPress={() => updateQuantity(item.id, item.quantity + 1)}
+                        >
+                            <Ionicons name="add" size={16} color="#333" />
+                        </TouchableOpacity>
+                    </View>
                 </View>
+                <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeFromCart(item.id)}
+                >
+                    <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
+                </TouchableOpacity>
             </View>
-            <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => removeFromCart(item.id)}
-            >
-                <Ionicons name="trash-outline" size={20} color="#FF6B6B" />
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     if (cartItems.length === 0) {
         return (

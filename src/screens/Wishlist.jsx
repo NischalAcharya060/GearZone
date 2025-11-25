@@ -18,32 +18,43 @@ const Wishlist = () => {
     const { addToCart } = useCart();
     const navigation = useNavigation();
 
-    const WishlistItem = ({ item }) => (
-        <View style={styles.wishlistItem}>
-            <TouchableOpacity onPress={() => navigation.navigate('ProductDetail', { product: item })}>
-                <Image source={{ uri: item.image }} style={styles.itemImage} />
-            </TouchableOpacity>
-            <View style={styles.itemDetails}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={styles.itemBrand}>{item.brand}</Text>
-                <Text style={styles.itemPrice}>${item.price}</Text>
-                <View style={styles.buttonContainer}>
-                    <TouchableOpacity
-                        style={styles.addToCartButton}
-                        onPress={() => addToCart(item)}
-                    >
-                        <Text style={styles.addToCartText}>Add to Cart</Text>
-                    </TouchableOpacity>
+    const WishlistItem = ({ item }) => {
+        // Get the first image from the images array or use a fallback
+        const productImage = item.images && item.images.length > 0
+            ? item.images[0]
+            : 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=500&h=500&fit=crop';
+
+        return (
+            <View style={styles.wishlistItem}>
+                <TouchableOpacity onPress={() => navigation.navigate('ProductDetail', { product: item })}>
+                    <Image
+                        source={{ uri: productImage }}
+                        style={styles.itemImage}
+                        resizeMode="cover"
+                    />
+                </TouchableOpacity>
+                <View style={styles.itemDetails}>
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemBrand}>{item.brand}</Text>
+                    <Text style={styles.itemPrice}>${item.price}</Text>
+                    <View style={styles.buttonContainer}>
+                        <TouchableOpacity
+                            style={styles.addToCartButton}
+                            onPress={() => addToCart(item)}
+                        >
+                            <Text style={styles.addToCartText}>Add to Cart</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
+                <TouchableOpacity
+                    style={styles.removeButton}
+                    onPress={() => removeFromWishlist(item.id)}
+                >
+                    <Ionicons name="heart" size={24} color="#FF6B6B" />
+                </TouchableOpacity>
             </View>
-            <TouchableOpacity
-                style={styles.removeButton}
-                onPress={() => removeFromWishlist(item.id)}
-            >
-                <Ionicons name="heart" size={24} color="#FF6B6B" />
-            </TouchableOpacity>
-        </View>
-    );
+        );
+    };
 
     if (wishlistItems.length === 0) {
         return (

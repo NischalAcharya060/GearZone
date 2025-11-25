@@ -22,6 +22,14 @@ const Compare = () => {
     const { user } = useAuth();
     const navigation = useNavigation();
 
+    // Get the first image from images array or use item.image as fallback
+    const getProductImage = (item) => {
+        if (item.images && item.images.length > 0) {
+            return item.images[0];
+        }
+        return item.image || 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=500&h=500&fit=crop';
+    };
+
     const showLoginAlert = (action) => {
         Alert.alert(
             'Sign In Required',
@@ -56,7 +64,11 @@ const Compare = () => {
             >
                 <Ionicons name="close-circle" size={20} color="#FF6B6B" />
             </TouchableOpacity>
-            <Image source={{ uri: item.image }} style={styles.itemImage} />
+            <Image
+                source={{ uri: getProductImage(item) }}
+                style={styles.itemImage}
+                resizeMode="cover"
+            />
             <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
             <Text style={styles.itemBrand}>{item.brand}</Text>
             <Text style={styles.itemPrice}>${item.price}</Text>
@@ -206,7 +218,11 @@ const Compare = () => {
                         {compareItems[0] && (
                             <View style={styles.productColumn}>
                                 <View style={styles.productHeader}>
-                                    <Image source={{ uri: compareItems[0].image }} style={styles.productImage} />
+                                    <Image
+                                        source={{ uri: getProductImage(compareItems[0]) }}
+                                        style={styles.productImage}
+                                        resizeMode="cover"
+                                    />
                                     <Text style={styles.productName} numberOfLines={2}>
                                         {compareItems[0].name}
                                     </Text>
@@ -238,7 +254,11 @@ const Compare = () => {
                         {compareItems[1] && (
                             <View style={styles.productColumn}>
                                 <View style={styles.productHeader}>
-                                    <Image source={{ uri: compareItems[1].image }} style={styles.productImage} />
+                                    <Image
+                                        source={{ uri: getProductImage(compareItems[1]) }}
+                                        style={styles.productImage}
+                                        resizeMode="cover"
+                                    />
                                     <Text style={styles.productName} numberOfLines={2}>
                                         {compareItems[1].name}
                                     </Text>
