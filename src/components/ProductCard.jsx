@@ -19,6 +19,11 @@ const ProductCard = ({ product, onPress }) => {
 
     const isWishlisted = isInWishlist(product.id);
 
+    // Get the first image from the images array
+    const productImage = product.images && product.images.length > 0
+        ? product.images[0]
+        : 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop'; // Fallback image
+
     const handleWishlistPress = () => {
         if (!user) {
             Alert.alert(
@@ -45,7 +50,11 @@ const ProductCard = ({ product, onPress }) => {
     return (
         <TouchableOpacity style={styles.card} onPress={onPress}>
             <View style={styles.imageContainer}>
-                <Image source={{ uri: product.image }} style={styles.image} />
+                <Image
+                    source={{ uri: productImage }}
+                    style={styles.image}
+                    resizeMode="cover"
+                />
                 <TouchableOpacity
                     style={styles.wishlistButton}
                     onPress={handleWishlistPress}

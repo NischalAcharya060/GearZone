@@ -8,14 +8,11 @@ import {
     SafeAreaView,
     ScrollView,
     Alert,
-    Image,
-    Platform,
     Modal,
     FlatList,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
-import * as ImagePicker from 'expo-image-picker';
 
 // Firebase imports
 import { firestore } from '../../firebase/config';
@@ -24,7 +21,6 @@ import { collection, addDoc, getDocs } from 'firebase/firestore';
 const AddProduct = () => {
     const navigation = useNavigation();
     const [loading, setLoading] = useState(false);
-    const [images, setImages] = useState([]);
     const [showCategoryModal, setShowCategoryModal] = useState(false);
     const [categories, setCategories] = useState([]);
     const [formData, setFormData] = useState({
@@ -80,44 +76,6 @@ const AddProduct = () => {
         }));
     };
 
-    const pickImage = async () => {
-        try {
-            // Request permissions
-            const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-            if (status !== 'granted') {
-                Alert.alert('Permission required', 'Sorry, we need camera roll permissions to upload images.');
-                return;
-            }
-
-            let result = await ImagePicker.launchImageLibraryAsync({
-                // FIXED: Use the correct mediaTypes format
-                mediaTypes: ImagePicker.MediaTypeOptions.Images,
-                allowsEditing: false,
-                aspect: [4, 3],
-                quality: 0.7,
-                allowsMultipleSelection: true,
-                selectionLimit: 5,
-            });
-
-            console.log('Image picker result:', result);
-
-            if (!result.canceled && result.assets) {
-                const newImages = result.assets.map(asset => asset.uri);
-                console.log('Selected images:', newImages);
-                setImages(prev => [...prev, ...newImages]);
-            } else {
-                console.log('Image selection canceled');
-            }
-        } catch (error) {
-            console.error('Error picking image:', error);
-            Alert.alert('Error', 'Failed to pick image. Please try again.');
-        }
-    };
-
-    const removeImage = (index) => {
-        setImages(prev => prev.filter((_, i) => i !== index));
-    };
-
     const selectCategory = (category) => {
         setFormData(prev => ({
             ...prev,
@@ -150,30 +108,98 @@ const AddProduct = () => {
             Alert.alert('Error', 'Please enter valid stock quantity');
             return false;
         }
-        if (images.length === 0) {
-            Alert.alert('Error', 'Please add at least one product image');
-            return false;
-        }
         return true;
     };
 
-    // Generate placeholder image paths based on product name
-    const generateImagePaths = () => {
-        const productName = formData.name.toLowerCase().replace(/[^a-z0-9]/g, '-');
-        const imagePaths = [];
+    // Generate placeholder image URLs based on product category
+    const generatePlaceholderImages = () => {
+        const categoryImages = {
+            // Laptop images
+            'laptop': [
+                'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=500&h=500&fit=crop'
+            ],
+            'laptops': [
+                'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1593640408182-31c70c8268f5?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1541807084-5c52b6b3adef?w=500&h=500&fit=crop'
+            ],
 
-        // Generate multiple placeholder image paths
-        for (let i = 0; i < images.length; i++) {
-            const path = `products/${productName}-${i + 1}.jpg`;
-            imagePaths.push(path);
+            // Headphone images
+            'headphone': [
+                'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=500&fit=crop'
+            ],
+            'headphones': [
+                'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=500&fit=crop'
+            ],
+
+            // Phone images
+            'phone': [
+                'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1565849904461-04a58ad377e0?w=500&h=500&fit=crop'
+            ],
+            'phones': [
+                'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1583394838336-acd977736f90?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1565849904461-04a58ad377e0?w=500&h=500&fit=crop'
+            ],
+
+            // Camera images
+            'camera': [
+                'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1606983340126-99ab4feaa64a?w=500&h=500&fit=crop'
+            ],
+            'cameras': [
+                'https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1606983340126-99ab4feaa64a?w=500&h=500&fit=crop'
+            ],
+
+            // Tablet images
+            'tablet': [
+                'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1561154464-82e9adf32764?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=500&h=500&fit=crop'
+            ],
+            'tablets': [
+                'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1561154464-82e9adf32764?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=500&h=500&fit=crop'
+            ],
+
+            // Default/Electronics images
+            'electronics': [
+                'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1560769624-6a4f57aae2c2?w=500&h=500&fit=crop',
+                'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=500&h=500&fit=crop'
+            ]
+        };
+
+        const defaultImages = [
+            'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=500&h=500&fit=crop',
+            'https://images.unsplash.com/photo-1560769624-6a4f57aae2c2?w=500&h=500&fit=crop',
+            'https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=500&h=500&fit=crop'
+        ];
+
+        if (!formData.category) {
+            return defaultImages;
         }
 
-        return imagePaths;
-    };
+        const categoryKey = formData.category.toLowerCase().trim();
 
-    // Use local image URIs directly (for demo purposes)
-    const getImageReferences = () => {
-        return images;
+        // Direct match
+        if (categoryImages[categoryKey]) {
+            return categoryImages[categoryKey];
+        }
+
+        return defaultImages;
     };
 
     const handleSubmit = async () => {
@@ -184,51 +210,43 @@ const AddProduct = () => {
         setLoading(true);
 
         try {
-            console.log('Starting product submission process...');
+            // Use placeholder images from Unsplash
+            const imageUrls = generatePlaceholderImages();
 
-            // Generate image paths for Firestore
-            const imagePaths = generateImagePaths();
-            console.log('Generated image paths:', imagePaths);
-
-            // Create new product object
+            // Create new product object with placeholder images
             const newProduct = {
                 name: formData.name.trim(),
                 category: formData.category,
                 price: parseFloat(formData.price),
                 originalPrice: parseFloat(formData.price) * 1.2,
-                images: imagePaths, // Store paths instead of uploaded URLs
-                imageUrls: getImageReferences(), // Store local URIs for demo
-                description: formData.description.trim(),
+                images: imageUrls,
+                description: formData.description.trim() || `High-quality ${formData.category || 'electronic'} product with excellent features and performance.`,
                 specifications: {
-                    battery: formData.specifications.battery || 'Not specified',
-                    connectivity: formData.specifications.connectivity || 'Not specified',
-                    weight: formData.specifications.weight || 'Not specified',
+                    battery: formData.specifications.battery || 'Up to 24 hours',
+                    connectivity: formData.specifications.connectivity || 'Bluetooth 5.0, USB-C',
+                    weight: formData.specifications.weight || '250g',
                     features: formData.specifications.features.length > 0 ?
-                        formData.specifications.features : ['Premium Quality', 'Latest Technology']
+                        formData.specifications.features : ['Premium Quality', 'Latest Technology', 'Wireless', 'Fast Charging']
                 },
-                rating: 4.0,
-                reviewCount: 0,
+                rating: 4.0 + (Math.random() * 1.0),
+                reviewCount: Math.floor(Math.random() * 100) + 10,
                 inStock: parseInt(formData.stock) > 0,
-                stock: parseInt(formData.stock),
-                brand: formData.brand.trim() || 'Generic',
+                stock: parseInt(formData.stock) || 50,
+                brand: formData.brand.trim() || 'TechBrand',
                 sku: formData.sku || generateSKU(),
                 createdAt: new Date(),
                 updatedAt: new Date(),
-                hasImages: images.length > 0,
-                imageCount: images.length,
-                imagePlaceholder: true, // Flag to indicate these are placeholder paths
+                hasImages: true,
+                imageCount: imageUrls.length,
+                imageStorage: 'external',
             };
-
-            console.log('Saving product to Firestore:', newProduct);
 
             // Save to Firestore
             const docRef = await addDoc(collection(firestore, 'products'), newProduct);
 
-            console.log('Product added with ID: ', docRef.id);
-
             Alert.alert(
                 'Success',
-                'Product added successfully!\n\nNote: Images are stored as local references. For production, upload images to a cloud service.',
+                'Product added successfully!',
                 [
                     {
                         text: 'OK',
@@ -264,7 +282,6 @@ const AddProduct = () => {
                 features: []
             }
         });
-        setImages([]);
     };
 
     const CategoryModal = () => (
@@ -325,40 +342,6 @@ const AddProduct = () => {
             </View>
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-                {/* Image Upload Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Product Images *</Text>
-                    <Text style={styles.sectionSubtitle}>
-                        Add at least one image (max 5) - Stored as local references
-                    </Text>
-
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.imageScroll}>
-                        <TouchableOpacity
-                            style={styles.imageUploadButton}
-                            onPress={pickImage}
-                            disabled={images.length >= 5}
-                        >
-                            <Ionicons name="camera-outline" size={32} color="#666" />
-                            <Text style={styles.imageUploadText}>
-                                {images.length >= 5 ? 'Max 5 Images' : 'Add Images'}
-                            </Text>
-                            <Text style={styles.imageCount}>({images.length}/5)</Text>
-                        </TouchableOpacity>
-
-                        {images.map((image, index) => (
-                            <View key={index} style={styles.imageContainer}>
-                                <Image source={{ uri: image }} style={styles.image} />
-                                <TouchableOpacity
-                                    style={styles.removeImageButton}
-                                    onPress={() => removeImage(index)}
-                                >
-                                    <Ionicons name="close-circle" size={24} color="#EF4444" />
-                                </TouchableOpacity>
-                            </View>
-                        ))}
-                    </ScrollView>
-                </View>
-
                 {/* Product Information */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Product Information</Text>
@@ -568,53 +551,6 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#1F2937',
         marginBottom: 4,
-    },
-    sectionSubtitle: {
-        fontSize: 14,
-        color: '#6B7280',
-        marginBottom: 16,
-    },
-    imageScroll: {
-        marginBottom: 8,
-    },
-    imageUploadButton: {
-        width: 120,
-        height: 120,
-        borderWidth: 2,
-        borderColor: '#D1D5DB',
-        borderStyle: 'dashed',
-        borderRadius: 12,
-        justifyContent: 'center',
-        alignItems: 'center',
-        marginRight: 12,
-        backgroundColor: '#F9FAFB',
-    },
-    imageUploadText: {
-        marginTop: 8,
-        fontSize: 12,
-        color: '#666',
-        textAlign: 'center',
-    },
-    imageCount: {
-        fontSize: 10,
-        color: '#999',
-        marginTop: 4,
-    },
-    imageContainer: {
-        position: 'relative',
-        marginRight: 12,
-    },
-    image: {
-        width: 120,
-        height: 120,
-        borderRadius: 12,
-    },
-    removeImageButton: {
-        position: 'absolute',
-        top: -8,
-        right: -8,
-        backgroundColor: 'white',
-        borderRadius: 12,
     },
     inputGroup: {
         marginBottom: 16,
