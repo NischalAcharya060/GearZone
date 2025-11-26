@@ -28,6 +28,7 @@ import AddProduct from './src/screens/admin/AddProduct';
 import ManageOrders from './src/screens/admin/ManageOrders';
 import Analytics from './src/screens/admin/Analytics';
 import AddCategory from "./src/screens/admin/AddCategory";
+import Addresses from "./src/screens/Addresses";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -180,6 +181,8 @@ const ProfileStack = () => {
                             headerBackTitle: 'Back'
                         }}
                     />
+                    <Stack.Screen name="Addresses" component={Addresses} />
+
                 </>
             )}
         </Stack.Navigator>

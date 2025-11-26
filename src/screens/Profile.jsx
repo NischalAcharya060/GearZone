@@ -159,8 +159,7 @@ const Profile = () => {
                                         Alert.alert('Coming Soon', 'Personal Information feature coming soon!');
                                         break;
                                     case 'Addresses':
-                                        // navigation.navigate('Addresses');
-                                        Alert.alert('Coming Soon', 'Addresses feature coming soon!');
+                                        navigation.navigate('Addresses');
                                         break;
                                     case 'Payment Methods':
                                         // navigation.navigate('PaymentMethods');
