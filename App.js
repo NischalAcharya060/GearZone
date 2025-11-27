@@ -22,6 +22,7 @@ import SignIn from './src/screens/SignIn';
 import SignUp from './src/screens/SignUp';
 import LoadingScreen from './src/screens/LoadingScreen';
 import Search from './src/screens/Search';
+import OrderConfirmation from './src/screens/OrderConfirmation';
 
 // Admin Screens
 import AddProduct from './src/screens/admin/AddProduct';
@@ -29,6 +30,7 @@ import ManageOrders from './src/screens/admin/ManageOrders';
 import Analytics from './src/screens/admin/Analytics';
 import AddCategory from "./src/screens/admin/AddCategory";
 import Addresses from "./src/screens/Addresses";
+import OrderHistory from "./src/screens/OrderHistory";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -77,6 +79,15 @@ const CartStack = () => {
                 options={{
                     title: 'Checkout',
                     headerBackTitle: 'Back'
+                }}
+            />
+            {/* Order Confirmation accessible from cart flow */}
+            <Stack.Screen
+                name="OrderConfirmation"
+                component={OrderConfirmation}
+                options={{
+                    headerShown: false,
+                    gestureEnabled: false
                 }}
             />
         </Stack.Navigator>
@@ -146,6 +157,22 @@ const ProfileStack = () => {
                 component={SignUp}
                 options={{ headerShown: false }}
             />
+            <Stack.Screen
+                name="Addresses"
+                component={Addresses}
+                options={{
+                    title: 'My Addresses',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <Stack.Screen
+                name="Orders"
+                component={OrderHistory}
+                options={{
+                    title: 'Order History',
+                    headerBackTitle: 'Back'
+                }}
+            />
             {/* Admin Only Screens */}
             {user?.role === 'admin' && (
                 <>
@@ -181,8 +208,6 @@ const ProfileStack = () => {
                             headerBackTitle: 'Back'
                         }}
                     />
-                    <Stack.Screen name="Addresses" component={Addresses} />
-
                 </>
             )}
         </Stack.Navigator>
@@ -295,7 +320,18 @@ const RootNavigator = () => {
             <Stack.Navigator screenOptions={{ headerShown: false }}>
                 {user ? (
                     // User is signed in - show main app
-                    <Stack.Screen name="MainApp" component={MainTabs} />
+                    <>
+                        <Stack.Screen name="MainApp" component={MainTabs} />
+                        {/* Global screens accessible from anywhere */}
+                        <Stack.Screen
+                            name="OrderConfirmation"
+                            component={OrderConfirmation}
+                            options={{
+                                headerShown: false,
+                                gestureEnabled: false
+                            }}
+                        />
+                    </>
                 ) : (
                     // User is not signed in - show auth flow
                     <Stack.Screen name="Auth" component={AuthStack} />

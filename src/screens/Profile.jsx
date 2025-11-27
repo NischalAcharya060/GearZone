@@ -161,13 +161,8 @@ const Profile = () => {
                                     case 'Addresses':
                                         navigation.navigate('Addresses');
                                         break;
-                                    case 'Payment Methods':
-                                        // navigation.navigate('PaymentMethods');
-                                        Alert.alert('Coming Soon', 'Payment Methods feature coming soon!');
-                                        break;
                                     case 'Order History':
-                                        // navigation.navigate('OrderHistory');
-                                        Alert.alert('Coming Soon', 'Order History feature coming soon!');
+                                        navigation.navigate('Orders');
                                         break;
                                     case 'Wishlist':
                                         navigation.navigate('WishlistTab');

@@ -9,6 +9,7 @@ import {
     Alert,
     ActivityIndicator,
     Platform,
+    Linking
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,9 +19,10 @@ import { StripeProvider, useStripe } from '@stripe/stripe-react-native';
 
 import { useAuth } from '../context/AuthContext';
 import { firestore } from '../firebase/config';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 
-const STRIPE_PUBLISHABLE_KEY = process.env.STRIPE_PUBLISHABLE_KEY;
+// Fix environment variable access for React Native
+const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_publishable_key_here';
 
 const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'default', required = false }) => (
     <View style={styles.inputGroup}>
@@ -39,10 +41,48 @@ const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'd
 );
 
 const getApiUrl = () => {
-    if (Platform.OS === 'android') {
-        return 'http://10.0.2.2:4242/api/payment-sheet';
+    if (__DEV__) {
+        // For physical devices and simulators
+        const baseUrl = 'http://192.168.1.66:4242';
+        const url = `${baseUrl}/api/payment-sheet`;
+        console.log('🌐 Using server URL:', url);
+        return url;
     }
-    return 'http://localhost:4242/api/payment-sheet';
+    return 'https://your-production-server.com/api/payment-sheet';
+};
+
+// URL Handler Component for iOS
+const StripeURLHandler = () => {
+    const { handleURLCallback } = useStripe();
+
+    const handleDeepLink = async (url) => {
+        if (url) {
+            const stripeHandled = await handleURLCallback(url);
+            if (stripeHandled) {
+                console.log('Stripe handled the URL:', url);
+            }
+        }
+    };
+
+    useEffect(() => {
+        const getUrlAsync = async () => {
+            const initialUrl = await Linking.getInitialURL();
+            handleDeepLink(initialUrl);
+        };
+
+        getUrlAsync();
+
+        const deepLinkListener = Linking.addEventListener(
+            'url',
+            (event) => {
+                handleDeepLink(event.url);
+            }
+        );
+
+        return () => deepLinkListener.remove();
+    }, []);
+
+    return null;
 };
 
 const Checkout = () => {
@@ -171,9 +211,9 @@ const Checkout = () => {
             const data = await response.json();
 
             return {
-                paymentIntent: data.clientSecret,
+                paymentIntent: data.paymentIntent,
                 ephemeralKey: data.ephemeralKey,
-                customer: data.customerId,
+                customer: data.customer,
             };
 
         } catch (error) {
@@ -183,6 +223,56 @@ const Checkout = () => {
         }
     };
 
+    const saveOrderToFirestore = async () => {
+        try {
+            const subtotal = getCartTotal();
+            const shipping = subtotal > 0 ? 9.99 : 0;
+            const tax = subtotal * 0.08;
+            const total = subtotal + shipping + tax;
+
+            const orderData = {
+                userId: user.uid,
+                orderNumber: `ORD-${Date.now()}`,
+                items: cartItems.map(item => ({
+                    productId: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity,
+                    image: item.images?.[0] || '📦'
+                })),
+                total: total,
+                subtotal: subtotal,
+                shippingCost: shipping,
+                tax: tax,
+                shippingInfo: {
+                    fullName: formData.fullName,
+                    email: formData.email,
+                    phone: formData.phone,
+                    address: formData.address,
+                    city: formData.city,
+                    state: formData.state,
+                    zipCode: formData.zipCode,
+                    country: formData.country
+                },
+                paymentMethod: 'Credit Card',
+                status: 'processing',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+
+            const ordersRef = collection(firestore, 'orders');
+            const docRef = await addDoc(ordersRef, orderData);
+
+            console.log('Order saved with ID:', docRef.id);
+            return {
+                ...orderData,
+                id: docRef.id
+            };
+        } catch (error) {
+            console.error('Error saving order to Firestore:', error);
+            throw error;
+        }
+    };
 
     const initializePaymentSheet = async () => {
         try {
@@ -196,7 +286,7 @@ const Checkout = () => {
                 customerEphemeralKeySecret: ephemeralKey,
                 customerId: customer,
                 allowsDelayedPaymentMethods: true,
-                returnURL: 'your-app://stripe-redirect',
+                returnURL: 'yourapp://stripe-redirect',
                 defaultBillingDetails: {
                     name: formData.fullName,
                     email: formData.email,
@@ -220,6 +310,7 @@ const Checkout = () => {
             }
         } catch (error) {
             console.error('Error in initializePaymentSheet:', error);
+            Alert.alert('Error', 'Failed to initialize payment system. Please try again.');
             return false;
         }
     };
@@ -228,15 +319,23 @@ const Checkout = () => {
         const { error } = await presentPaymentSheet();
 
         if (error) {
-            Alert.alert(`Error code: ${error.code}`, error.message);
+            if (error.code === 'Canceled') {
+                console.log('Payment canceled by user');
+            } else {
+                Alert.alert(`Payment Error`, error.message);
+            }
             setIsProcessing(false);
         } else {
-            handlePaymentSuccess();
+            await handlePaymentSuccess();
         }
     };
 
     const handleCheckout = async () => {
-        if (!formData.fullName || !formData.email || !formData.phone || !formData.address || !formData.city || !formData.state || !formData.zipCode || !formData.country) {
+        // Validate required fields
+        const requiredFields = ['fullName', 'email', 'phone', 'address', 'city', 'state', 'zipCode'];
+        const missingFields = requiredFields.filter(field => !formData[field]);
+
+        if (missingFields.length > 0) {
             Alert.alert('Error', 'Please fill in all required shipping fields.');
             return;
         }
@@ -257,28 +356,39 @@ const Checkout = () => {
             }
         } catch (error) {
             console.error('Checkout process failed:', error);
+            Alert.alert('Checkout Error', 'Something went wrong. Please try again.');
             setIsProcessing(false);
         }
     };
 
-    const handlePaymentSuccess = () => {
-        setIsProcessing(false);
-        Alert.alert(
-            'Payment Successful!',
-            'Your order has been placed successfully.',
-            [
-                {
-                    text: 'OK',
-                    onPress: () => {
-                        clearCart();
-                        navigation.navigate('OrderConfirmation', {
-                            orderTotal: total,
-                            orderNumber: `ORD-${Date.now()}`
-                        });
-                    }
-                }
-            ]
-        );
+    const handlePaymentSuccess = async () => {
+        try {
+            // Save order to Firestore
+            const savedOrder = await saveOrderToFirestore();
+
+            // Calculate total for order confirmation
+            const subtotal = getCartTotal();
+            const shipping = subtotal > 0 ? 9.99 : 0;
+            const tax = subtotal * 0.08;
+            const total = subtotal + shipping + tax;
+
+            // Navigate to order confirmation
+            navigation.navigate('OrderConfirmation', {
+                orderTotal: total,
+                orderNumber: savedOrder.orderNumber,
+                orderId: savedOrder.id,
+                paymentMethod: 'Credit Card'
+            });
+
+            // Clear cart after navigation
+            clearCart();
+
+        } catch (error) {
+            console.error('Error handling payment success:', error);
+            Alert.alert('Error', 'Payment was successful but there was an issue saving your order. Please contact support.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const subtotal = getCartTotal();
@@ -301,11 +411,13 @@ const Checkout = () => {
         </View>
     );
 
-
     return (
         <StripeProvider
             publishableKey={STRIPE_PUBLISHABLE_KEY}
+            merchantIdentifier="merchant.com.yourapp.identifier"
+            urlScheme="yourapp"
         >
+            <StripeURLHandler />
             <SafeAreaView style={styles.container} edges={['bottom']}>
                 <View style={styles.header}>
                     <TouchableOpacity
@@ -331,7 +443,7 @@ const Checkout = () => {
                                         </Text>
                                     </View>
                                     <Text style={styles.itemTotal}>
-                                        {(item.price * item.quantity).toFixed(2)}
+                                        ${(item.price * item.quantity).toFixed(2)}
                                     </Text>
                                 </View>
                             ))}
@@ -469,7 +581,6 @@ const Checkout = () => {
                                 </View>
                             </>
                         )}
-
                     </View>
 
                     <View style={styles.section}>
@@ -530,7 +641,7 @@ const Checkout = () => {
                     >
                         {isProcessing ? (
                             <View style={styles.processingContainer}>
-                                <Ionicons name="refresh" size={20} color="white" style={styles.spinner} />
+                                <ActivityIndicator size="small" color="white" style={{ marginRight: 8 }} />
                                 <Text style={styles.checkoutButtonText}>Processing...</Text>
                             </View>
                         ) : (
@@ -888,9 +999,6 @@ const styles = StyleSheet.create({
     processingContainer: {
         flexDirection: 'row',
         alignItems: 'center',
-    },
-    spinner: {
-        marginRight: 8,
     },
 });
 
