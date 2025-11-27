@@ -8,6 +8,8 @@ import {
     ActivityIndicator,
     Image,
     Dimensions,
+    Animated,
+    StatusBar,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,6 +31,8 @@ const OrderConfirmation = () => {
 
     const [orderDetails, setOrderDetails] = useState(null);
     const [loading, setLoading] = useState(true);
+    const fadeAnim = useState(new Animated.Value(0))[0];
+    const slideAnim = useState(new Animated.Value(50))[0];
 
     const mockupOrderDetails = {
         orderNumber: orderNumber || `ORD-${Math.floor(Math.random() * 100000)}`,
@@ -51,7 +55,6 @@ const OrderConfirmation = () => {
         createdAt: new Date().toISOString(),
     };
 
-    // Fetch real order data from Firestore
     useEffect(() => {
         const fetchOrderDetails = async () => {
             let data = null;
@@ -73,6 +76,20 @@ const OrderConfirmation = () => {
                 });
                 setLoading(false);
                 clearCart();
+
+                // Start animations
+                Animated.parallel([
+                    Animated.timing(fadeAnim, {
+                        toValue: 1,
+                        duration: 800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(slideAnim, {
+                        toValue: 0,
+                        duration: 600,
+                        useNativeDriver: true,
+                    }),
+                ]).start();
             }
         };
 
@@ -114,11 +131,10 @@ const OrderConfirmation = () => {
         return `${rangeStart} - ${rangeEnd}`;
     };
 
-    // --- UPDATED NAVIGATION FUNCTIONS ---
     const resetToHome = () => {
         navigation.reset({
             index: 0,
-            routes: [{ name: 'HomeTab' }], // Assumes 'HomeTab' is the name of your Tab Navigator
+            routes: [{ name: 'HomeTab' }],
         });
     };
 
@@ -132,7 +148,6 @@ const OrderConfirmation = () => {
             routes: [{ name: 'ProfileTab', params: { screen: 'Orders' } }],
         });
     };
-    // ------------------------------------
 
     const ProductImage = ({ product }) => {
         const [imageError, setImageError] = useState(false);
@@ -150,7 +165,7 @@ const OrderConfirmation = () => {
         if (imageError || !imageUri) {
             return (
                 <View style={styles.itemImagePlaceholder}>
-                    <Ionicons name="image-outline" size={24} color="#999" />
+                    <Ionicons name="image-outline" size={20} color="#9CA3AF" />
                 </View>
             );
         }
@@ -166,7 +181,7 @@ const OrderConfirmation = () => {
                 />
                 {imageLoading && (
                     <View style={styles.imageLoading}>
-                        <ActivityIndicator size="small" color="#2563EB" />
+                        <ActivityIndicator size="small" color="#6366F1" />
                     </View>
                 )}
             </View>
@@ -176,94 +191,105 @@ const OrderConfirmation = () => {
     if (loading) {
         return (
             <SafeAreaView style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#2563EB" />
-                <Text style={styles.loadingText}>Confirming your order...</Text>
+                <View style={styles.loadingContent}>
+                    <ActivityIndicator size="large" color="#6366F1" />
+                    <Text style={styles.loadingText}>Confirming your order...</Text>
+                </View>
             </SafeAreaView>
         );
     }
 
     const estimatedDeliveryRange = getDeliveryDateRange(orderDetails?.createdAt);
     const timelineData = [
-        { title: 'Order Placed', description: 'Your order has been received', status: 'placed' },
-        { title: 'Processing', description: 'Preparing your order', status: 'processing' },
-        { title: 'Shipped', description: 'On its way to you', status: 'shipped' },
-        { title: 'Delivered', description: `Expected ${estimatedDeliveryRange}`, status: 'delivered' },
+        { title: 'Order Placed', description: 'Your order has been received', status: 'placed', icon: 'checkmark-circle' },
+        { title: 'Processing', description: 'Preparing your order', status: 'processing', icon: 'build' },
+        { title: 'Shipped', description: 'On its way to you', status: 'shipped', icon: 'car' },
+        { title: 'Delivered', description: `Expected ${estimatedDeliveryRange}`, status: 'delivered', icon: 'home' },
     ];
 
     const currentStatusIndex = timelineData.findIndex(step => step.status === orderDetails?.status) || 0;
 
     return (
-        <SafeAreaView style={styles.container} edges={['bottom']}>
-            {/* Header */}
+        <SafeAreaView style={styles.container} edges={['top']}>
+            <StatusBar backgroundColor="#FFFFFF" barStyle="dark-content" />
+
+            {/* Modern Header - Moved down with proper spacing */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={resetToHome} // Use reset function
+                    onPress={resetToHome}
                 >
-                    <Ionicons name="arrow-back" size={24} color="#333" />
+                    <Ionicons name="chevron-back" size={24} color="#374151" />
                 </TouchableOpacity>
-                <Text style={styles.headerTitle}>Order Confirmation</Text>
-                <View style={styles.placeholder} />
+                <Text style={styles.headerTitle}>Order Confirmed</Text>
+                <View style={styles.headerRight} />
             </View>
 
             <ScrollView
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
-                {/* Success Banner */}
-                <View style={styles.successBanner}>
-                    <View style={styles.successIconContainer}>
-                        <Ionicons name="checkmark-circle" size={80} color="#10B981" />
+                {/* Success Hero Section */}
+                <Animated.View
+                    style={[
+                        styles.successHero,
+                        {
+                            opacity: fadeAnim,
+                            transform: [{ translateY: slideAnim }]
+                        }
+                    ]}
+                >
+                    <View style={styles.successIconWrapper}>
+                        <View style={styles.successIconBackground}>
+                            <Ionicons name="checkmark" size={32} color="#FFFFFF" />
+                        </View>
                     </View>
-                    <Text style={styles.successTitle}>Order Confirmed!</Text>
-                    <Text style={styles.successMessage}>
-                        Thank you for your purchase. Your order has been successfully placed.
+                    <Text style={styles.successHeroTitle}>Order Confirmed!</Text>
+                    <Text style={styles.successHeroSubtitle}>
+                        Thank you for your purchase. We've sent a confirmation email.
                     </Text>
-                    <View style={styles.orderNumberBadge}>
-                        <Text style={styles.orderNumberText}>Order #{orderDetails?.orderNumber}</Text>
-                    </View>
-                    {/* Expected Delivery Date Range */}
-                    <View style={styles.deliveryEstimateBox}>
-                        <Ionicons name="calendar-outline" size={18} color="#2563EB" />
-                        <Text style={styles.deliveryEstimateText}>
-                            Estimated Delivery: <Text style={styles.deliveryEstimateDate}>{estimatedDeliveryRange}</Text>
-                        </Text>
-                    </View>
-                </View>
 
-                {/* Order Timeline Card */}
-                <View style={styles.timelineCard}>
-                    <Text style={styles.sectionTitle}>Order Status</Text>
+                    <View style={styles.orderInfoBadge}>
+                        <Text style={styles.orderInfoLabel}>Order Number</Text>
+                        <Text style={styles.orderInfoValue}>#{orderDetails?.orderNumber}</Text>
+                    </View>
+
+                    <View style={styles.deliveryCard}>
+                        <Ionicons name="time-outline" size={20} color="#6366F1" />
+                        <View style={styles.deliveryInfo}>
+                            <Text style={styles.deliveryLabel}>Estimated Delivery</Text>
+                            <Text style={styles.deliveryDate}>{estimatedDeliveryRange}</Text>
+                        </View>
+                    </View>
+                </Animated.View>
+
+                {/* Order Timeline */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionHeader}>Order Timeline</Text>
                     <View style={styles.timeline}>
                         {timelineData.map((step, index) => (
-                            <View key={index}>
-                                <View style={styles.timelineStep}>
+                            <View key={index} style={styles.timelineItem}>
+                                <View style={styles.timelineContent}>
                                     <View style={[
-                                        styles.timelineDot,
-                                        index < currentStatusIndex && styles.timelineDotComplete,
-                                        index === currentStatusIndex && styles.timelineDotActive,
-                                        index > currentStatusIndex && styles.timelineDotUpcoming,
+                                        styles.timelineIcon,
+                                        index <= currentStatusIndex ? styles.timelineIconActive : styles.timelineIconInactive
                                     ]}>
-                                        {index < currentStatusIndex ? (
-                                            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                                        ) : (
-                                            <View style={[
-                                                styles.timelineDotInner,
-                                                index === currentStatusIndex && styles.timelineDotInnerActive
-                                            ]} />
-                                        )}
+                                        <Ionicons
+                                            name={step.icon}
+                                            size={16}
+                                            color={index <= currentStatusIndex ? "#FFFFFF" : "#9CA3AF"}
+                                        />
                                     </View>
-                                    <View style={styles.timelineStepContent}>
+                                    <View style={styles.timelineText}>
                                         <Text style={[
-                                            styles.timelineStepTitle,
-                                            index === currentStatusIndex && styles.timelineStepTitleActive
+                                            styles.timelineTitle,
+                                            index <= currentStatusIndex && styles.timelineTitleActive
                                         ]}>
                                             {step.title}
                                         </Text>
-                                        <Text style={styles.timelineStepDescription}>{step.description}</Text>
+                                        <Text style={styles.timelineDescription}>{step.description}</Text>
                                     </View>
                                 </View>
-
                                 {index < timelineData.length - 1 && (
                                     <View style={[
                                         styles.timelineConnector,
@@ -275,141 +301,146 @@ const OrderConfirmation = () => {
                     </View>
                 </View>
 
-                {/* Order Summary Card */}
-                <View style={styles.card}>
-                    <View style={styles.cardHeader}>
-                        <Ionicons name="receipt-outline" size={20} color="#2563EB" />
-                        <Text style={styles.cardTitle}>Order Details</Text>
+                {/* Order Items */}
+                <View style={styles.section}>
+                    <View style={styles.sectionHeaderRow}>
+                        <Text style={styles.sectionHeader}>Order Items</Text>
+                        <Text style={styles.itemsCount}>({orderDetails?.items?.length || 0})</Text>
                     </View>
-
-                    <Text style={styles.sectionTitle}>Items Ordered ({orderDetails?.items?.length || 0})</Text>
-                    {orderDetails?.items && orderDetails.items.length > 0 ? (
-                        orderDetails.items.map((item, index) => (
-                            <View key={item.productId || index} style={styles.orderItem}>
-                                <ProductImage product={item} />
-                                <View style={styles.itemDetails}>
-                                    <Text style={styles.itemName} numberOfLines={2}>
-                                        {item.name || 'Product'}
-                                    </Text>
-                                    <Text style={styles.itemPrice}>
-                                        {formatCurrency(item.price)} × {item.quantity}
-                                    </Text>
-                                    {(item.size || item.color) && (
-                                        <Text style={styles.itemVariant}>
-                                            {item.size ? `Size: ${item.size}` : ''}
-                                            {item.size && item.color ? ' | ' : ''}
-                                            {item.color ? `Color: ${item.color}` : ''}
+                    <View style={styles.itemsCard}>
+                        {orderDetails?.items && orderDetails.items.length > 0 ? (
+                            orderDetails.items.map((item, index) => (
+                                <View key={item.productId || index} style={styles.orderItem}>
+                                    <ProductImage product={item} />
+                                    <View style={styles.itemInfo}>
+                                        <Text style={styles.itemName} numberOfLines={2}>
+                                            {item.name || 'Product'}
                                         </Text>
-                                    )}
+                                        <Text style={styles.itemMeta}>
+                                            {formatCurrency(item.price)} × {item.quantity}
+                                        </Text>
+                                        {(item.size || item.color) && (
+                                            <Text style={styles.itemVariants}>
+                                                {item.size ? `Size: ${item.size}` : ''}
+                                                {item.size && item.color ? ' • ' : ''}
+                                                {item.color ? `Color: ${item.color}` : ''}
+                                            </Text>
+                                        )}
+                                    </View>
+                                    <Text style={styles.itemTotal}>
+                                        {formatCurrency((item.price || 0) * (item.quantity || 1))}
+                                    </Text>
                                 </View>
-                                <Text style={styles.itemTotal}>
-                                    {formatCurrency((item.price || 0) * (item.quantity || 1))}
-                                </Text>
+                            ))
+                        ) : (
+                            <View style={styles.emptyItems}>
+                                <Ionicons name="cart-outline" size={40} color="#E5E7EB" />
+                                <Text style={styles.emptyItemsText}>No items found</Text>
                             </View>
-                        ))
-                    ) : (
-                        <View style={styles.noItemsContainer}>
-                            <Ionicons name="cart-outline" size={48} color="#E5E7EB" />
-                            <Text style={styles.noItemsText}>No items found in this order</Text>
-                        </View>
-                    )}
-
-                    <View style={styles.divider} />
-
-                    {/* Order Total */}
-                    <View style={styles.summaryRow}>
-                        <Text style={styles.summaryLabel}>Subtotal</Text>
-                        <Text style={styles.summaryValue}>
-                            {formatCurrency(orderDetails?.subtotal || orderDetails?.total)}
-                        </Text>
+                        )}
                     </View>
-                    {orderDetails?.shippingCost > 0 && (
+                </View>
+
+                {/* Order Summary */}
+                <View style={styles.section}>
+                    <Text style={styles.sectionHeader}>Order Summary</Text>
+                    <View style={styles.summaryCard}>
                         <View style={styles.summaryRow}>
-                            <Text style={styles.summaryLabel}>Shipping</Text>
-                            <Text style={styles.summaryValue}>{formatCurrency(orderDetails?.shippingCost)}</Text>
+                            <Text style={styles.summaryLabel}>Subtotal</Text>
+                            <Text style={styles.summaryValue}>
+                                {formatCurrency(orderDetails?.subtotal || orderDetails?.total)}
+                            </Text>
                         </View>
-                    )}
-                    {orderDetails?.tax > 0 && (
-                        <View style={styles.summaryRow}>
-                            <Text style={styles.summaryLabel}>Tax</Text>
-                            <Text style={styles.summaryValue}>{formatCurrency(orderDetails?.tax)}</Text>
+                        {orderDetails?.shippingCost > 0 && (
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Shipping</Text>
+                                <Text style={styles.summaryValue}>{formatCurrency(orderDetails?.shippingCost)}</Text>
+                            </View>
+                        )}
+                        {orderDetails?.tax > 0 && (
+                            <View style={styles.summaryRow}>
+                                <Text style={styles.summaryLabel}>Tax</Text>
+                                <Text style={styles.summaryValue}>{formatCurrency(orderDetails?.tax)}</Text>
+                            </View>
+                        )}
+                        <View style={styles.divider} />
+                        <View style={[styles.summaryRow, styles.totalRow]}>
+                            <Text style={styles.totalLabel}>Total</Text>
+                            <Text style={styles.totalAmount}>
+                                {formatCurrency(orderDetails?.total)}
+                            </Text>
                         </View>
-                    )}
-                    <View style={[styles.summaryRow, styles.totalRow]}>
-                        <Text style={styles.totalLabel}>Total</Text>
-                        <Text style={styles.totalAmount}>
-                            {formatCurrency(orderDetails?.total)}
-                        </Text>
                     </View>
                 </View>
 
                 {/* Shipping & Payment Info */}
-                <View style={styles.infoRow}>
-                    {/* Shipping Information */}
-                    <View style={[styles.card, styles.halfCard]}>
-                        <View style={styles.cardHeader}>
-                            <Ionicons name="location-outline" size={20} color="#2563EB" />
-                            <Text style={styles.cardTitle}>Shipping</Text>
+                <View style={styles.infoGrid}>
+                    <View style={styles.infoCard}>
+                        <View style={styles.infoCardHeader}>
+                            <Ionicons name="location" size={20} color="#6366F1" />
+                            <Text style={styles.infoCardTitle}>Shipping Address</Text>
                         </View>
                         {orderDetails?.shippingInfo ? (
-                            <View style={styles.shippingInfo}>
+                            <View style={styles.shippingDetails}>
                                 <Text style={styles.shippingName}>{orderDetails.shippingInfo.fullName}</Text>
                                 <Text style={styles.shippingAddress}>
-                                    {orderDetails.shippingInfo.address}, {orderDetails.shippingInfo.city}
+                                    {orderDetails.shippingInfo.address}
                                 </Text>
                                 <Text style={styles.shippingAddress}>
-                                    {orderDetails.shippingInfo.state} {orderDetails.shippingInfo.zipCode}, {orderDetails.shippingInfo.country}
+                                    {orderDetails.shippingInfo.city}, {orderDetails.shippingInfo.state} {orderDetails.shippingInfo.zipCode}
+                                </Text>
+                                <Text style={styles.shippingAddress}>
+                                    {orderDetails.shippingInfo.country}
                                 </Text>
                                 {orderDetails.shippingInfo.phone && (
                                     <Text style={styles.shippingPhone}>
-                                        <Ionicons name="call-outline" size={14} color="#6B7280" /> {orderDetails.shippingInfo.phone}
+                                        <Ionicons name="call" size={14} color="#6B7280" /> {orderDetails.shippingInfo.phone}
                                     </Text>
                                 )}
                             </View>
                         ) : (
-                            <Text style={styles.noDataText}>Shipping information not available</Text>
+                            <Text style={styles.noData}>No shipping information</Text>
                         )}
                     </View>
 
-                    {/* Payment Information */}
-                    <View style={[styles.card, styles.halfCard]}>
-                        <View style={styles.cardHeader}>
-                            <Ionicons name="card-outline" size={20} color="#2563EB" />
-                            <Text style={styles.cardTitle}>Payment</Text>
+                    <View style={styles.infoCard}>
+                        <View style={styles.infoCardHeader}>
+                            <Ionicons name="card" size={20} color="#6366F1" />
+                            <Text style={styles.infoCardTitle}>Payment Method</Text>
                         </View>
-                        <View style={styles.paymentInfo}>
+                        <View style={styles.paymentDetails}>
                             <Text style={styles.paymentMethod}>{orderDetails?.paymentMethod || 'Credit Card'}</Text>
-                            <View style={[styles.statusBadge, styles.paidBadge]}>
-                                <Ionicons name="checkmark" size={14} color="#FFFFFF" />
-                                <Text style={[styles.statusText, styles.paidText]}>Paid</Text>
+                            <View style={styles.paymentStatus}>
+                                <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                <Text style={styles.paymentStatusText}>Payment Successful</Text>
                             </View>
                         </View>
-                        <Text style={styles.paymentAmount}>{formatCurrency(orderDetails?.total)}</Text>
+                        <Text style={styles.paymentTotal}>{formatCurrency(orderDetails?.total)}</Text>
                     </View>
                 </View>
+
+                <View style={styles.bottomSpacer} />
             </ScrollView>
 
-            {/* Fixed Action Buttons */}
-            <View style={styles.footer}>
-                <View style={styles.buttonContainer}>
-                    <TouchableOpacity
-                        style={styles.primaryButton}
-                        onPress={handleContinueShopping}
-                        activeOpacity={0.8}
-                    >
-                        <Ionicons name="cart-outline" size={20} color="#FFFFFF" />
-                        <Text style={styles.primaryButtonText}>Continue Shopping</Text>
-                    </TouchableOpacity>
+            {/* Modern Action Buttons */}
+            <View style={styles.actions}>
+                <TouchableOpacity
+                    style={styles.primaryAction}
+                    onPress={handleContinueShopping}
+                    activeOpacity={0.8}
+                >
+                    <Ionicons name="bag-handle-outline" size={20} color="#FFFFFF" />
+                    <Text style={styles.primaryActionText}>Continue Shopping</Text>
+                </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.secondaryButton}
-                        onPress={handleViewOrders}
-                        activeOpacity={0.7}
-                    >
-                        <Ionicons name="list-outline" size={20} color="#2563EB" />
-                        <Text style={styles.secondaryButtonText}>View Orders</Text>
-                    </TouchableOpacity>
-                </View>
+                <TouchableOpacity
+                    style={styles.secondaryAction}
+                    onPress={handleViewOrders}
+                    activeOpacity={0.7}
+                >
+                    <Ionicons name="document-text-outline" size={20} color="#6366F1" />
+                    <Text style={styles.secondaryActionText}>View Orders</Text>
+                </TouchableOpacity>
             </View>
         </SafeAreaView>
     );
@@ -426,235 +457,239 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         backgroundColor: '#F8FAFC',
     },
+    loadingContent: {
+        alignItems: 'center',
+    },
     loadingText: {
         marginTop: 16,
         fontSize: 16,
         color: '#6B7280',
+        fontWeight: '500',
     },
     header: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        backgroundColor: 'white',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        backgroundColor: '#FFFFFF',
         borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
+        borderBottomColor: '#F1F5F9',
+        marginTop: 10, // Added margin to push header down
     },
     backButton: {
         padding: 8,
-        borderRadius: 8,
+        borderRadius: 12,
         backgroundColor: '#F8FAFC',
     },
     headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1F2937',
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1E293B',
     },
-    placeholder: {
+    headerRight: {
         width: 40,
     },
-    scrollView: {
-        flex: 1,
-    },
     scrollContent: {
-        paddingBottom: 120,
-        paddingHorizontal: 16,
+        paddingHorizontal: 20,
+        paddingTop: 10, // Reduced top padding since header is lower
+        paddingBottom: 140, // Increased for better spacing with buttons
     },
-    successBanner: {
-        backgroundColor: 'white',
-        marginTop: 16,
+    successHero: {
+        backgroundColor: '#6366F1',
+        marginTop: 10,
         padding: 24,
         borderRadius: 20,
         alignItems: 'center',
-        shadowColor: '#000',
+        shadowColor: '#6366F1',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.08,
+        shadowOpacity: 0.3,
         shadowRadius: 16,
-        elevation: 6,
+        elevation: 8,
     },
-    successIconContainer: {
+    successIconWrapper: {
         marginBottom: 16,
     },
-    successTitle: {
-        fontSize: 26,
-        fontWeight: 'bold',
-        color: '#10B981',
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-    successMessage: {
-        fontSize: 16,
-        color: '#6B7280',
-        textAlign: 'center',
-        lineHeight: 22,
-        marginBottom: 20,
-    },
-    orderNumberBadge: {
-        backgroundColor: '#EFF6FF',
-        paddingHorizontal: 20,
-        paddingVertical: 10,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#DBEAFE',
-        marginBottom: 16,
-    },
-    orderNumberText: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#2563EB',
-    },
-    deliveryEstimateBox: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#F0FDF4',
-        paddingVertical: 8,
-        paddingHorizontal: 16,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#DCFCE7',
-    },
-    deliveryEstimateText: {
-        fontSize: 14,
-        color: '#10B981',
-        marginLeft: 8,
-        fontWeight: '500',
-    },
-    deliveryEstimateDate: {
-        fontWeight: '700',
-        color: '#047857',
-    },
-    timelineCard: {
-        backgroundColor: 'white',
-        marginTop: 16,
-        padding: 20,
-        borderRadius: 16,
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
-        shadowRadius: 8,
-        elevation: 2,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1F2937',
-        marginBottom: 20,
-    },
-    timeline: {
-        // Timeline container
-    },
-    timelineStep: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-    },
-    timelineDot: {
-        width: 24,
-        height: 24,
-        borderRadius: 12,
+    successIconBackground: {
+        width: 70,
+        height: 70,
+        borderRadius: 35,
         backgroundColor: '#10B981',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 16,
-        marginTop: 2,
-        borderWidth: 2,
-        borderColor: 'transparent',
+        shadowColor: '#10B981',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+        elevation: 6,
     },
-    timelineDotInner: {
-        width: 10,
-        height: 10,
-        borderRadius: 5,
-        backgroundColor: '#FFFFFF',
+    successHeroTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#FFFFFF',
+        marginBottom: 8,
+        textAlign: 'center',
     },
-    timelineDotInnerActive: {
-        backgroundColor: '#2563EB',
+    successHeroSubtitle: {
+        fontSize: 15,
+        color: 'rgba(255,255,255,0.9)',
+        textAlign: 'center',
+        lineHeight: 20,
+        marginBottom: 20,
     },
-    timelineDotComplete: {
-        backgroundColor: '#10B981',
-        borderColor: '#10B981',
+    orderInfoBadge: {
+        backgroundColor: 'rgba(255,255,255,0.15)',
+        paddingHorizontal: 16,
+        paddingVertical: 10,
+        borderRadius: 12,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
     },
-    timelineDotActive: {
-        backgroundColor: '#FFFFFF',
-        borderColor: '#2563EB',
-    },
-    timelineDotUpcoming: {
-        backgroundColor: '#E5E7EB',
-        borderColor: '#D1D5DB',
-    },
-    timelineStepContent: {
-        flex: 1,
-        paddingBottom: 10,
-    },
-    timelineStepTitle: {
-        fontSize: 16,
+    orderInfoLabel: {
+        fontSize: 12,
+        color: 'rgba(255,255,255,0.8)',
         fontWeight: '600',
-        color: '#1F2937',
-        marginBottom: 4,
+        marginBottom: 2,
+        textAlign: 'center',
     },
-    timelineStepTitleActive: {
-        color: '#2563EB',
+    orderInfoValue: {
+        fontSize: 14,
+        color: '#FFFFFF',
+        fontWeight: '800',
+        textAlign: 'center',
+    },
+    deliveryCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.1)',
+        padding: 14,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.2)',
+        width: '100%',
+    },
+    deliveryInfo: {
+        marginLeft: 10,
+        flex: 1,
+    },
+    deliveryLabel: {
+        fontSize: 13,
+        color: 'rgba(255,255,255,0.8)',
+        fontWeight: '500',
+        marginBottom: 2,
+    },
+    deliveryDate: {
+        fontSize: 14,
+        color: '#FFFFFF',
         fontWeight: '700',
     },
-    timelineStepDescription: {
+    section: {
+        marginTop: 20,
+    },
+    sectionHeaderRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    sectionHeader: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#1E293B',
+        marginRight: 6,
+    },
+    itemsCount: {
         fontSize: 14,
-        color: '#6B7280',
-        lineHeight: 18,
+        color: '#64748B',
+        fontWeight: '500',
     },
-    timelineConnector: {
-        width: 2,
-        height: 30,
-        backgroundColor: '#E5E7EB',
-        marginLeft: 11,
-        marginVertical: -6,
-    },
-    timelineConnectorActive: {
-        backgroundColor: '#10B981',
-    },
-    card: {
-        backgroundColor: 'white',
-        marginTop: 16,
-        padding: 20,
+    timeline: {
+        backgroundColor: '#FFFFFF',
         borderRadius: 16,
+        padding: 20,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.05,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
         shadowRadius: 8,
         elevation: 2,
     },
-    halfCard: {
-        flex: 1,
-        marginTop: 0,
+    timelineItem: {
+        position: 'relative',
     },
-    infoRow: {
+    timelineContent: {
         flexDirection: 'row',
-        marginTop: 16,
-        gap: 16,
+        alignItems: 'flex-start',
     },
-    cardHeader: {
-        flexDirection: 'row',
+    timelineIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        justifyContent: 'center',
         alignItems: 'center',
-        marginBottom: 16,
+        marginRight: 12,
+        marginTop: 2,
     },
-    cardTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1F2937',
-        marginLeft: 8,
+    timelineIconActive: {
+        backgroundColor: '#6366F1',
+    },
+    timelineIconInactive: {
+        backgroundColor: '#F1F5F9',
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
+    },
+    timelineText: {
+        flex: 1,
+        paddingBottom: 20,
+    },
+    timelineTitle: {
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#64748B',
+        marginBottom: 2,
+    },
+    timelineTitleActive: {
+        color: '#1E293B',
+    },
+    timelineDescription: {
+        fontSize: 13,
+        color: '#94A3B8',
+        lineHeight: 16,
+    },
+    timelineConnector: {
+        position: 'absolute',
+        left: 13,
+        top: 28,
+        bottom: 0,
+        width: 2,
+        backgroundColor: '#E2E8F0',
+    },
+    timelineConnectorActive: {
+        backgroundColor: '#6366F1',
+    },
+    itemsCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
     },
     orderItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
-        padding: 10,
-        backgroundColor: '#F8FAFC',
-        borderRadius: 10,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F1F5F9',
     },
     itemImageContainer: {
-        position: 'relative',
         width: 50,
         height: 50,
-        borderRadius: 8,
+        borderRadius: 10,
         overflow: 'hidden',
         marginRight: 12,
+        backgroundColor: '#F8FAFC',
     },
     itemImage: {
         width: '100%',
@@ -663,202 +698,235 @@ const styles = StyleSheet.create({
     itemImagePlaceholder: {
         width: 50,
         height: 50,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 8,
+        backgroundColor: '#F1F5F9',
+        borderRadius: 10,
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
     },
     imageLoading: {
         ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(255,255,255,0.7)',
+        backgroundColor: 'rgba(248,250,252,0.8)',
     },
-    itemDetails: {
+    itemInfo: {
         flex: 1,
-        marginRight: 12,
+        marginRight: 8,
     },
     itemName: {
         fontSize: 14,
         fontWeight: '600',
-        color: '#374151',
+        color: '#1E293B',
         marginBottom: 2,
     },
-    itemPrice: {
+    itemMeta: {
         fontSize: 13,
-        color: '#6B7280',
+        color: '#64748B',
+        marginBottom: 1,
     },
-    itemVariant: {
-        fontSize: 12,
-        color: '#9CA3AF',
-        marginTop: 2,
+    itemVariants: {
+        fontSize: 11,
+        color: '#94A3B8',
     },
     itemTotal: {
-        fontSize: 15,
+        fontSize: 14,
         fontWeight: '700',
-        color: '#1F2937',
+        color: '#1E293B',
     },
-    noItemsContainer: {
+    emptyItems: {
         alignItems: 'center',
-        padding: 32,
+        padding: 30,
     },
-    noItemsText: {
-        fontSize: 14,
-        color: '#6B7280',
+    emptyItemsText: {
+        fontSize: 13,
+        color: '#94A3B8',
+        marginTop: 6,
         fontStyle: 'italic',
-        textAlign: 'center',
-        marginTop: 8,
     },
-    noDataText: {
-        fontSize: 14,
-        color: '#6B7280',
-        fontStyle: 'italic',
-        paddingVertical: 10,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#E5E7EB',
-        marginVertical: 16,
+    summaryCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 20,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
     },
     summaryRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
-    },
-    totalRow: {
-        borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
-        paddingTop: 16,
-        marginTop: 8,
+        marginBottom: 8,
     },
     summaryLabel: {
-        fontSize: 15,
-        color: '#6B7280',
+        fontSize: 14,
+        color: '#64748B',
+        fontWeight: '500',
     },
     summaryValue: {
-        fontSize: 15,
-        color: '#374151',
+        fontSize: 14,
+        color: '#1E293B',
         fontWeight: '600',
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#E2E8F0',
+        marginVertical: 12,
+    },
+    totalRow: {
+        marginTop: 4,
     },
     totalLabel: {
-        fontSize: 18,
+        fontSize: 16,
         fontWeight: '700',
-        color: '#1F2937',
+        color: '#1E293B',
     },
     totalAmount: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#2563EB',
+        fontSize: 20,
+        fontWeight: '800',
+        color: '#6366F1',
     },
-    shippingInfo: {
-        // Shipping info styles
+    infoGrid: {
+        flexDirection: 'row',
+        marginTop: 20,
+        gap: 12,
     },
-    shippingName: {
-        fontSize: 15,
-        fontWeight: '600',
-        color: '#1F2937',
-        marginBottom: 4,
+    infoCard: {
+        flex: 1,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 16,
+        padding: 16,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.08,
+        shadowRadius: 8,
+        elevation: 2,
     },
-    shippingAddress: {
-        fontSize: 14,
-        color: '#374151',
-        marginBottom: 2,
-        lineHeight: 18,
-    },
-    shippingPhone: {
-        fontSize: 14,
-        color: '#6B7280',
+    infoCardHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginTop: 8,
+        marginBottom: 12,
     },
-    paymentInfo: {
+    infoCardTitle: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1E293B',
+        marginLeft: 6,
+    },
+    shippingDetails: {
+        // Shipping details styles
+    },
+    shippingName: {
+        fontSize: 14,
+        fontWeight: '600',
+        color: '#1E293B',
+        marginBottom: 2,
+    },
+    shippingAddress: {
+        fontSize: 12,
+        color: '#64748B',
+        marginBottom: 1,
+        lineHeight: 16,
+    },
+    shippingPhone: {
+        fontSize: 12,
+        color: '#64748B',
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+    },
+    paymentDetails: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 8,
     },
     paymentMethod: {
-        fontSize: 16,
+        fontSize: 14,
         fontWeight: '600',
-        color: '#374151',
+        color: '#1E293B',
     },
-    paymentAmount: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#2563EB',
-    },
-    statusBadge: {
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
+    paymentStatus: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        backgroundColor: '#F0FDF4',
+        paddingHorizontal: 6,
+        paddingVertical: 3,
+        borderRadius: 6,
+        gap: 3,
     },
-    paidBadge: {
-        backgroundColor: '#10B981',
-    },
-    statusText: {
-        fontSize: 12,
+    paymentStatusText: {
+        fontSize: 11,
+        color: '#10B981',
         fontWeight: '600',
     },
-    paidText: {
-        color: '#FFFFFF',
+    paymentTotal: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#6366F1',
     },
-    footer: {
+    noData: {
+        fontSize: 13,
+        color: '#94A3B8',
+        fontStyle: 'italic',
+        textAlign: 'center',
+        paddingVertical: 16,
+    },
+    bottomSpacer: {
+        height: 20,
+    },
+    actions: {
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
-        backgroundColor: 'white',
-        padding: 16,
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 20,
+        paddingVertical: 16,
+        paddingBottom: 30, // Extra padding for bottom safe area
         borderTopWidth: 1,
-        borderTopColor: '#E5E7EB',
+        borderTopColor: '#F1F5F9',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -4 },
         shadowOpacity: 0.1,
-        shadowRadius: 8,
+        shadowRadius: 12,
         elevation: 8,
+        gap: 10,
     },
-    buttonContainer: {
-        gap: 12,
-    },
-    primaryButton: {
-        backgroundColor: '#2563EB',
+    primaryAction: {
+        backgroundColor: '#6366F1',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 16,
-        borderRadius: 12,
+        borderRadius: 14,
         gap: 8,
-        shadowColor: '#2563EB',
+        shadowColor: '#6366F1',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
         elevation: 4,
     },
-    secondaryButton: {
-        backgroundColor: 'white',
+    secondaryAction: {
+        backgroundColor: '#FFFFFF',
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         paddingVertical: 14,
-        borderRadius: 12,
-        borderWidth: 2,
-        borderColor: '#2563EB',
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: '#E2E8F0',
         gap: 8,
     },
-    primaryButtonText: {
+    primaryActionText: {
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: '700',
     },
-    secondaryButtonText: {
-        color: '#2563EB',
-        fontSize: 16,
+    secondaryActionText: {
+        color: '#64748B',
+        fontSize: 15,
         fontWeight: '600',
     },
 });

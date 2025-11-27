@@ -87,7 +87,6 @@ const CartStack = () => {
                 component={OrderConfirmation}
                 options={{
                     headerShown: false,
-                    gestureEnabled: false
                 }}
             />
         </Stack.Navigator>

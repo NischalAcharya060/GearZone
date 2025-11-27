@@ -111,8 +111,22 @@ const ProductDetail = ({ route, navigation }) => {
             return;
         }
 
-        handleAddToCart();
-        navigation.navigate('Cart');
+        // 1. Prepare the single item for direct checkout
+        const directItem = {
+            ...product,
+            quantity: quantity,
+        };
+
+        Alert.alert('Success', `Proceeding to Checkout with ${quantity} x ${product.name}.`);
+
+        // 2. Navigate directly to the 'Checkout' screen in the 'CartTab' stack,
+        //    passing the direct purchase item.
+        navigation.navigate('CartTab', {
+            screen: 'Checkout',
+            params: {
+                directPurchaseItem: directItem,
+            }
+        });
     };
 
     const increaseQuantity = () => setQuantity(prev => prev + 1);

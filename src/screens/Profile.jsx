@@ -145,12 +145,6 @@ const Profile = () => {
             onPress: () => navigation.navigate('Addresses')
         },
         {
-            icon: 'card-outline',
-            title: 'Payment Methods',
-            color: '#F59E0B',
-            onPress: () => Alert.alert('Coming Soon', 'Payment Methods feature coming soon!')
-        },
-        {
             icon: 'document-text-outline',
             title: 'Order History',
             color: '#8B5CF6',

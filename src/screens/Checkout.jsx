@@ -21,7 +21,6 @@ import { useAuth } from '../context/AuthContext';
 import { firestore } from '../firebase/config';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
 
-// Fix environment variable access for React Native
 const STRIPE_PUBLISHABLE_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY || 'pk_test_your_publishable_key_here';
 
 const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'default', required = false }) => (
@@ -42,16 +41,14 @@ const InputField = ({ label, placeholder, value, onChangeText, keyboardType = 'd
 
 const getApiUrl = () => {
     if (__DEV__) {
-        // For physical devices and simulators
         const baseUrl = 'http://192.168.1.66:4242';
         const url = `${baseUrl}/api/payment-sheet`;
-        console.log('🌐 Using server URL:', url);
+        console.log('Using server URL:', url);
         return url;
     }
     return 'https://your-production-server.com/api/payment-sheet';
 };
 
-// URL Handler Component for iOS
 const StripeURLHandler = () => {
     const { handleURLCallback } = useStripe();
 
@@ -85,15 +82,30 @@ const StripeURLHandler = () => {
     return null;
 };
 
-const Checkout = () => {
+const Checkout = ({ route }) => { // route is required to get params
     useEffect(() => {
         console.log("Stripe Publishable Key in use:", STRIPE_PUBLISHABLE_KEY);
     }, []);
 
     const navigation = useNavigation();
-    const { cartItems, getCartTotal, clearCart } = useCart();
+    const { cartItems, clearCart } = useCart();
     const { initPaymentSheet, presentPaymentSheet } = useStripe();
     const { user } = useAuth();
+
+    // --- Direct Purchase Logic Start ---
+    const directPurchaseItem = route.params?.directPurchaseItem;
+    const itemsToProcess = directPurchaseItem ? [directPurchaseItem] : cartItems;
+
+    const calculateSubtotal = (items) => {
+        if (!items || items.length === 0) return 0;
+        return items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
+    };
+
+    const subtotal = calculateSubtotal(itemsToProcess);
+    const shipping = subtotal > 0 ? 9.99 : 0;
+    const tax = subtotal * 0.08;
+    const total = subtotal + shipping + tax;
+    // --- Direct Purchase Logic End ---
 
     const [defaultAddress, setDefaultAddress] = useState(null);
     const [isUsingDefaultAddress, setIsUsingDefaultAddress] = useState(true);
@@ -225,21 +237,24 @@ const Checkout = () => {
 
     const saveOrderToFirestore = async () => {
         try {
-            const subtotal = getCartTotal();
-            const shipping = subtotal > 0 ? 9.99 : 0;
-            const tax = subtotal * 0.08;
-            const total = subtotal + shipping + tax;
+            // Totals are already calculated using itemsToProcess outside this function
+            // const subtotal = getCartTotal(); // REMOVED
+            // const shipping = subtotal > 0 ? 9.99 : 0; // REMOVED
+            // const tax = subtotal * 0.08; // REMOVED
+            // const total = subtotal + shipping + tax; // REMOVED
 
             const orderData = {
                 userId: user.uid,
                 orderNumber: `ORD-${Date.now()}`,
-                items: cartItems.map(item => ({
+                // Use itemsToProcess for order items
+                items: itemsToProcess.map(item => ({
                     productId: item.id,
                     name: item.name,
                     price: item.price,
                     quantity: item.quantity,
-                    image: item.images?.[0] || '📦'
+                    image: item.images?.[0] || item.image || 'N/A'
                 })),
+                // Use calculated totals
                 total: total,
                 subtotal: subtotal,
                 shippingCost: shipping,
@@ -264,6 +279,12 @@ const Checkout = () => {
             const docRef = await addDoc(ordersRef, orderData);
 
             console.log('Order saved with ID:', docRef.id);
+
+            // Only clear the cart if it was NOT a direct purchase
+            if (!directPurchaseItem) {
+                clearCart();
+            }
+
             return {
                 ...orderData,
                 id: docRef.id
@@ -276,12 +297,13 @@ const Checkout = () => {
 
     const initializePaymentSheet = async () => {
         try {
-            const totalAmount = getCartTotal() + 9.99 + (getCartTotal() * 0.08);
+            // Use the already calculated total amount
+            const totalAmount = total;
 
             const { paymentIntent, ephemeralKey, customer } = await fetchPaymentSheetParams(totalAmount);
 
             const { error } = await initPaymentSheet({
-                merchantDisplayName: "TechStore Inc.",
+                merchantDisplayName: "GearZone",
                 paymentIntentClientSecret: paymentIntent,
                 customerEphemeralKeySecret: ephemeralKey,
                 customerId: customer,
@@ -340,8 +362,9 @@ const Checkout = () => {
             return;
         }
 
-        if (cartItems.length === 0) {
-            Alert.alert('Error', 'Your cart is empty');
+        // Check for items to process
+        if (itemsToProcess.length === 0) {
+            Alert.alert('Error', 'No items to checkout');
             return;
         }
 
@@ -363,25 +386,18 @@ const Checkout = () => {
 
     const handlePaymentSuccess = async () => {
         try {
-            // Save order to Firestore
+            // Save order to Firestore (clears cart inside if not direct purchase)
             const savedOrder = await saveOrderToFirestore();
 
-            // Calculate total for order confirmation
-            const subtotal = getCartTotal();
-            const shipping = subtotal > 0 ? 9.99 : 0;
-            const tax = subtotal * 0.08;
-            const total = subtotal + shipping + tax;
+            // Totals are already calculated using itemsToProcess
 
             // Navigate to order confirmation
             navigation.navigate('OrderConfirmation', {
-                orderTotal: total,
+                orderTotal: total, // Use calculated total
                 orderNumber: savedOrder.orderNumber,
                 orderId: savedOrder.id,
                 paymentMethod: 'Credit Card'
             });
-
-            // Clear cart after navigation
-            clearCart();
 
         } catch (error) {
             console.error('Error handling payment success:', error);
@@ -391,10 +407,6 @@ const Checkout = () => {
         }
     };
 
-    const subtotal = getCartTotal();
-    const shipping = subtotal > 0 ? 9.99 : 0;
-    const tax = subtotal * 0.08;
-    const total = subtotal + shipping + tax;
 
     const DefaultAddressDisplay = ({ address, onEdit }) => (
         <View style={styles.addressDisplayCard}>
@@ -434,12 +446,12 @@ const Checkout = () => {
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Order Summary</Text>
                         <View style={styles.orderItems}>
-                            {cartItems.map((item) => (
-                                <View key={item.id} style={styles.orderItem}>
+                            {itemsToProcess.map((item, index) => (
+                                <View key={item.id || index.toString()} style={styles.orderItem}>
                                     <View style={styles.itemInfo}>
                                         <Text style={styles.itemName}>{item.name}</Text>
                                         <Text style={styles.itemDetails}>
-                                            ${item.price} × {item.quantity}
+                                            ${item.price} x {item.quantity}
                                         </Text>
                                     </View>
                                     <Text style={styles.itemTotal}>
@@ -634,10 +646,10 @@ const Checkout = () => {
                     <TouchableOpacity
                         style={[
                             styles.checkoutButton,
-                            (isProcessing || cartItems.length === 0) && styles.checkoutButtonDisabled
+                            (isProcessing || itemsToProcess.length === 0) && styles.checkoutButtonDisabled
                         ]}
                         onPress={handleCheckout}
-                        disabled={isProcessing || cartItems.length === 0}
+                        disabled={isProcessing || itemsToProcess.length === 0}
                     >
                         {isProcessing ? (
                             <View style={styles.processingContainer}>

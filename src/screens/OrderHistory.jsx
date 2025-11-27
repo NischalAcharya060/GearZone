@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { // Added useRef
+import {
     View,
     Text,
     ScrollView,
@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { useCart } from '../context/CartContext'; // Import CartContext
 import { firestore } from '../firebase/config';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
 
@@ -24,6 +25,7 @@ const { width } = Dimensions.get('window');
 const OrderHistory = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
+    const { addToCart } = useCart(); // Get addToCart function from CartContext
 
     // Use a ref to track if the component is mounted for cleanup
     const isMounted = useRef(true);
@@ -32,6 +34,7 @@ const OrderHistory = () => {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
+    const [addingToCart, setAddingToCart] = useState(false); // Track loading state for reorder
 
     const [isFilterVisible, setIsFilterVisible] = useState(false);
     const [filterStatus, setFilterStatus] = useState('All');
@@ -92,6 +95,7 @@ const OrderHistory = () => {
                                     productName: productData.name,
                                     productImage: productData.images?.[0] || null,
                                     productPrice: productData.price,
+                                    productData: productData, // Store full product data for cart
                                 };
                             }
                             return item;
@@ -176,24 +180,86 @@ const OrderHistory = () => {
         }
     };
 
-    const handleReorder = (order) => {
-        Alert.alert(
-            'Reorder Items',
-            'Would you like to add these items to your cart?',
-            [
-                {
-                    text: 'Cancel',
-                    style: 'cancel'
-                },
-                {
-                    text: 'Add to Cart',
-                    onPress: () => {
-                        Alert.alert('Success', 'Items added to cart!');
-                        navigation.navigate('Cart');
+    const handleReorder = async (order) => {
+        if (!user) {
+            Alert.alert('Sign In Required', 'Please sign in to add items to cart.');
+            return;
+        }
+
+        setAddingToCart(true);
+
+        try {
+            let addedItemsCount = 0;
+            let failedItemsCount = 0;
+
+            // Add each item from the order to the cart
+            for (const item of order.items) {
+                try {
+                    // Create a product object for the cart
+                    const productForCart = {
+                        id: item.productId,
+                        name: item.productName || item.name,
+                        price: item.productPrice || item.price,
+                        image: item.productImage,
+                        images: item.productImage ? [item.productImage] : [],
+                        brand: item.brand || 'Unknown Brand',
+                        category: item.category || 'General',
+                        // Include any other product data that might be needed
+                        ...item.productData
+                    };
+
+                    // Add the item to cart with the specified quantity
+                    for (let i = 0; i < item.quantity; i++) {
+                        addToCart(productForCart);
                     }
+
+                    addedItemsCount += item.quantity;
+                } catch (error) {
+                    console.error('Error adding item to cart:', error);
+                    failedItemsCount += item.quantity;
                 }
-            ]
-        );
+            }
+
+            // Show success message
+            if (failedItemsCount === 0) {
+                Alert.alert(
+                    'Success!',
+                    `${addedItemsCount} item${addedItemsCount !== 1 ? 's' : ''} added to cart from order #${order.orderNumber}`,
+                    [
+                        {
+                            text: 'Continue Shopping',
+                            style: 'cancel'
+                        },
+                        {
+                            text: 'View Cart',
+                            onPress: () => navigation.navigate('CartTab')
+                        }
+                    ]
+                );
+            } else if (addedItemsCount > 0) {
+                Alert.alert(
+                    'Partial Success',
+                    `${addedItemsCount} item${addedItemsCount !== 1 ? 's' : ''} added to cart. ${failedItemsCount} item${failedItemsCount !== 1 ? 's' : ''} could not be added.`,
+                    [
+                        {
+                            text: 'Continue Shopping',
+                            style: 'cancel'
+                        },
+                        {
+                            text: 'View Cart',
+                            onPress: () => navigation.navigate('CartTab')
+                        }
+                    ]
+                );
+            } else {
+                Alert.alert('Error', 'Failed to add items to cart. Please try again.');
+            }
+        } catch (error) {
+            console.error('Error in reorder process:', error);
+            Alert.alert('Error', 'Failed to add items to cart. Please try again.');
+        } finally {
+            setAddingToCart(false);
+        }
     };
 
     const handleSelectFilter = (status) => {
@@ -348,11 +414,18 @@ const OrderHistory = () => {
 
                     <View style={styles.actionButtons}>
                         <TouchableOpacity
-                            style={styles.reorderButton}
+                            style={[styles.reorderButton, addingToCart && styles.disabledButton]}
                             onPress={() => handleReorder(order)}
+                            disabled={addingToCart}
                         >
-                            <Ionicons name="cart" size={16} color="#FFFFFF" />
-                            <Text style={styles.reorderButtonText}>Reorder</Text>
+                            {addingToCart ? (
+                                <ActivityIndicator size="small" color="#FFFFFF" />
+                            ) : (
+                                <>
+                                    <Ionicons name="cart" size={16} color="#FFFFFF" />
+                                    <Text style={styles.reorderButtonText}>Reorder</Text>
+                                </>
+                            )}
                         </TouchableOpacity>
 
                         <TouchableOpacity
@@ -828,6 +901,9 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         marginLeft: 8,
+    },
+    disabledButton: {
+        opacity: 0.6,
     },
     bottomSpacer: {
         height: 20,
