@@ -5,7 +5,6 @@ import {
     ScrollView,
     TouchableOpacity,
     StyleSheet,
-    Alert,
     ActivityIndicator,
     Image,
     Dimensions,
@@ -31,66 +30,46 @@ const OrderConfirmation = () => {
     const [orderDetails, setOrderDetails] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    const mockupOrderDetails = {
+        orderNumber: orderNumber || `ORD-${Math.floor(Math.random() * 100000)}`,
+        total: orderTotal || 0,
+        subtotal: orderTotal ? orderTotal * 0.9 : 0,
+        shippingCost: orderTotal ? orderTotal * 0.1 : 0,
+        tax: 0,
+        items: route.params?.items || [],
+        shippingInfo: {
+            fullName: user?.displayName || 'Guest User',
+            address: '123 E-Commerce St',
+            city: 'Shopville',
+            state: 'CA',
+            zipCode: '90210',
+            country: 'USA',
+            phone: '(555) 555-1234',
+        },
+        paymentMethod: paymentMethod,
+        status: 'placed',
+        createdAt: new Date().toISOString(),
+    };
+
     // Fetch real order data from Firestore
     useEffect(() => {
         const fetchOrderDetails = async () => {
+            let data = null;
             try {
                 if (orderId && user) {
-                    // Fetch real order data from Firestore
                     const orderRef = doc(firestore, 'orders', orderId);
                     const orderDoc = await getDoc(orderRef);
 
                     if (orderDoc.exists()) {
-                        const orderData = orderDoc.data();
-                        setOrderDetails({
-                            id: orderDoc.id,
-                            ...orderData
-                        });
-                    } else {
-                        // Fallback to passed data if order not found
-                        setOrderDetails({
-                            id: orderId,
-                            orderNumber: orderNumber,
-                            total: orderTotal,
-                            items: [],
-                            shippingInfo: {},
-                            paymentMethod: paymentMethod,
-                            status: 'processing',
-                            createdAt: new Date().toISOString(),
-                            estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-                        });
+                        data = { id: orderDoc.id, ...orderDoc.data() };
                     }
-                } else {
-                    // Fallback for direct navigation without orderId
-                    setOrderDetails({
-                        id: orderNumber || `ORD-${Date.now()}`,
-                        orderNumber: orderNumber,
-                        total: orderTotal || 0,
-                        items: [],
-                        shippingInfo: {},
-                        paymentMethod: paymentMethod,
-                        status: 'processing',
-                        createdAt: new Date().toISOString(),
-                        estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
-                    });
                 }
-
-                setLoading(false);
-                clearCart(); // Clear cart regardless
-
             } catch (error) {
                 console.error('Error fetching order details:', error);
-                // Fallback data on error
-                setOrderDetails({
-                    id: orderNumber || `ORD-${Date.now()}`,
-                    orderNumber: orderNumber,
-                    total: orderTotal || 0,
-                    items: [],
-                    shippingInfo: {},
-                    paymentMethod: paymentMethod,
-                    status: 'processing',
-                    createdAt: new Date().toISOString(),
-                    estimatedDelivery: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(),
+            } finally {
+                setOrderDetails(data || {
+                    id: orderId || mockupOrderDetails.orderNumber,
+                    ...mockupOrderDetails,
                 });
                 setLoading(false);
                 clearCart();
@@ -98,31 +77,63 @@ const OrderConfirmation = () => {
         };
 
         fetchOrderDetails();
-    }, [orderId, orderNumber, orderTotal, clearCart, user]);
-
-    const formatDate = (dateString) => {
-        if (!dateString) return 'Not available';
-        return new Date(dateString).toLocaleDateString('en-US', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
-    };
+    }, [orderId, clearCart, user]);
 
     const formatCurrency = (amount) => {
-        if (!amount) return '$0.00';
+        if (amount === undefined || amount === null) return '$0.00';
         return `$${parseFloat(amount).toFixed(2)}`;
     };
 
+    const getDeliveryDateRange = (dateString) => {
+        if (!dateString) return 'Not available';
+        const orderDate = new Date(dateString);
+
+        const date4 = new Date(orderDate);
+        date4.setDate(orderDate.getDate() + 4);
+
+        const date5 = new Date(orderDate);
+        date5.setDate(orderDate.getDate() + 5);
+
+        const dayMonthFormatter = new Intl.DateTimeFormat('en-US', {
+            month: 'short',
+            day: 'numeric'
+        });
+        const yearFormatter = new Intl.DateTimeFormat('en-US', {
+            year: 'numeric'
+        });
+
+        const rangeStart = dayMonthFormatter.format(date4);
+        let rangeEnd = dayMonthFormatter.format(date5);
+
+        if (date4.getFullYear() !== date5.getFullYear()) {
+            return `${rangeStart}, ${yearFormatter.format(date4)} - ${rangeEnd}, ${yearFormatter.format(date5)}`;
+        }
+
+        rangeEnd += `, ${yearFormatter.format(date5)}`;
+
+        return `${rangeStart} - ${rangeEnd}`;
+    };
+
+    // --- UPDATED NAVIGATION FUNCTIONS ---
+    const resetToHome = () => {
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'HomeTab' }], // Assumes 'HomeTab' is the name of your Tab Navigator
+        });
+    };
+
     const handleContinueShopping = () => {
-        navigation.navigate('HomeTab', { screen: 'Home' });
+        resetToHome();
     };
 
     const handleViewOrders = () => {
-        navigation.navigate('ProfileTab', { screen: 'Orders' });
+        navigation.reset({
+            index: 0,
+            routes: [{ name: 'ProfileTab', params: { screen: 'Orders' } }],
+        });
     };
+    // ------------------------------------
 
-    // Image component with error handling
     const ProductImage = ({ product }) => {
         const [imageError, setImageError] = useState(false);
         const [imageLoading, setImageLoading] = useState(true);
@@ -132,11 +143,11 @@ const OrderConfirmation = () => {
             setImageLoading(false);
         };
 
-        const handleImageLoad = () => {
-            setImageLoading(false);
-        };
+        const imageUri = (product?.images && product.images.length > 0)
+            ? product.images[0]
+            : (product?.image || null);
 
-        if (imageError || !product?.images || product.images.length === 0) {
+        if (imageError || !imageUri) {
             return (
                 <View style={styles.itemImagePlaceholder}>
                     <Ionicons name="image-outline" size={24} color="#999" />
@@ -147,11 +158,11 @@ const OrderConfirmation = () => {
         return (
             <View style={styles.itemImageContainer}>
                 <Image
-                    source={{ uri: product.images[0] }}
+                    source={{ uri: imageUri }}
                     style={styles.itemImage}
                     resizeMode="cover"
                     onError={handleImageError}
-                    onLoad={handleImageLoad}
+                    onLoad={() => setImageLoading(false)}
                 />
                 {imageLoading && (
                     <View style={styles.imageLoading}>
@@ -171,13 +182,23 @@ const OrderConfirmation = () => {
         );
     }
 
+    const estimatedDeliveryRange = getDeliveryDateRange(orderDetails?.createdAt);
+    const timelineData = [
+        { title: 'Order Placed', description: 'Your order has been received', status: 'placed' },
+        { title: 'Processing', description: 'Preparing your order', status: 'processing' },
+        { title: 'Shipped', description: 'On its way to you', status: 'shipped' },
+        { title: 'Delivered', description: `Expected ${estimatedDeliveryRange}`, status: 'delivered' },
+    ];
+
+    const currentStatusIndex = timelineData.findIndex(step => step.status === orderDetails?.status) || 0;
+
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
             {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
-                    onPress={() => navigation.navigate('HomeTab', { screen: 'Home' })}
+                    onPress={resetToHome} // Use reset function
                 >
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
@@ -186,7 +207,6 @@ const OrderConfirmation = () => {
             </View>
 
             <ScrollView
-                style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}
             >
@@ -197,58 +217,61 @@ const OrderConfirmation = () => {
                     </View>
                     <Text style={styles.successTitle}>Order Confirmed!</Text>
                     <Text style={styles.successMessage}>
-                        Thank you for your purchase. Your order has been successfully placed and is being processed.
+                        Thank you for your purchase. Your order has been successfully placed.
                     </Text>
                     <View style={styles.orderNumberBadge}>
                         <Text style={styles.orderNumberText}>Order #{orderDetails?.orderNumber}</Text>
                     </View>
+                    {/* Expected Delivery Date Range */}
+                    <View style={styles.deliveryEstimateBox}>
+                        <Ionicons name="calendar-outline" size={18} color="#2563EB" />
+                        <Text style={styles.deliveryEstimateText}>
+                            Estimated Delivery: <Text style={styles.deliveryEstimateDate}>{estimatedDeliveryRange}</Text>
+                        </Text>
+                    </View>
                 </View>
 
-                {/* Order Timeline */}
+                {/* Order Timeline Card */}
                 <View style={styles.timelineCard}>
-                    <Text style={styles.timelineTitle}>Order Status</Text>
+                    <Text style={styles.sectionTitle}>Order Status</Text>
                     <View style={styles.timeline}>
-                        <View style={[styles.timelineStep, styles.timelineStepActive]}>
-                            <View style={styles.timelineDot}>
-                                <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                        {timelineData.map((step, index) => (
+                            <View key={index}>
+                                <View style={styles.timelineStep}>
+                                    <View style={[
+                                        styles.timelineDot,
+                                        index < currentStatusIndex && styles.timelineDotComplete,
+                                        index === currentStatusIndex && styles.timelineDotActive,
+                                        index > currentStatusIndex && styles.timelineDotUpcoming,
+                                    ]}>
+                                        {index < currentStatusIndex ? (
+                                            <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                                        ) : (
+                                            <View style={[
+                                                styles.timelineDotInner,
+                                                index === currentStatusIndex && styles.timelineDotInnerActive
+                                            ]} />
+                                        )}
+                                    </View>
+                                    <View style={styles.timelineStepContent}>
+                                        <Text style={[
+                                            styles.timelineStepTitle,
+                                            index === currentStatusIndex && styles.timelineStepTitleActive
+                                        ]}>
+                                            {step.title}
+                                        </Text>
+                                        <Text style={styles.timelineStepDescription}>{step.description}</Text>
+                                    </View>
+                                </View>
+
+                                {index < timelineData.length - 1 && (
+                                    <View style={[
+                                        styles.timelineConnector,
+                                        index < currentStatusIndex && styles.timelineConnectorActive
+                                    ]} />
+                                )}
                             </View>
-                            <View style={styles.timelineStepContent}>
-                                <Text style={styles.timelineStepTitle}>Order Placed</Text>
-                                <Text style={styles.timelineStepDescription}>Your order has been received</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.timelineConnector} />
-
-                        <View style={styles.timelineStep}>
-                            <View style={[styles.timelineDot, styles.timelineDotUpcoming]} />
-                            <View style={styles.timelineStepContent}>
-                                <Text style={styles.timelineStepTitle}>Processing</Text>
-                                <Text style={styles.timelineStepDescription}>Preparing your order</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.timelineConnector} />
-
-                        <View style={styles.timelineStep}>
-                            <View style={[styles.timelineDot, styles.timelineDotUpcoming]} />
-                            <View style={styles.timelineStepContent}>
-                                <Text style={styles.timelineStepTitle}>Shipped</Text>
-                                <Text style={styles.timelineStepDescription}>On its way to you</Text>
-                            </View>
-                        </View>
-
-                        <View style={styles.timelineConnector} />
-
-                        <View style={styles.timelineStep}>
-                            <View style={[styles.timelineDot, styles.timelineDotUpcoming]} />
-                            <View style={styles.timelineStepContent}>
-                                <Text style={styles.timelineStepTitle}>Delivered</Text>
-                                <Text style={styles.timelineStepDescription}>
-                                    Expected {formatDate(orderDetails?.estimatedDelivery)}
-                                </Text>
-                            </View>
-                        </View>
+                        ))}
                     </View>
                 </View>
 
@@ -259,8 +282,7 @@ const OrderConfirmation = () => {
                         <Text style={styles.cardTitle}>Order Details</Text>
                     </View>
 
-                    {/* Order Items - REAL DATA */}
-                    <Text style={styles.sectionTitle}>Items Ordered</Text>
+                    <Text style={styles.sectionTitle}>Items Ordered ({orderDetails?.items?.length || 0})</Text>
                     {orderDetails?.items && orderDetails.items.length > 0 ? (
                         orderDetails.items.map((item, index) => (
                             <View key={item.productId || index} style={styles.orderItem}>
@@ -272,11 +294,12 @@ const OrderConfirmation = () => {
                                     <Text style={styles.itemPrice}>
                                         {formatCurrency(item.price)} × {item.quantity}
                                     </Text>
-                                    {item.size && (
-                                        <Text style={styles.itemSize}>Size: {item.size}</Text>
-                                    )}
-                                    {item.color && (
-                                        <Text style={styles.itemColor}>Color: {item.color}</Text>
+                                    {(item.size || item.color) && (
+                                        <Text style={styles.itemVariant}>
+                                            {item.size ? `Size: ${item.size}` : ''}
+                                            {item.size && item.color ? ' | ' : ''}
+                                            {item.color ? `Color: ${item.color}` : ''}
+                                        </Text>
                                     )}
                                 </View>
                                 <Text style={styles.itemTotal}>
@@ -287,13 +310,13 @@ const OrderConfirmation = () => {
                     ) : (
                         <View style={styles.noItemsContainer}>
                             <Ionicons name="cart-outline" size={48} color="#E5E7EB" />
-                            <Text style={styles.noItemsText}>No items in this order</Text>
+                            <Text style={styles.noItemsText}>No items found in this order</Text>
                         </View>
                     )}
 
                     <View style={styles.divider} />
 
-                    {/* Order Total - REAL DATA */}
+                    {/* Order Total */}
                     <View style={styles.summaryRow}>
                         <Text style={styles.summaryLabel}>Subtotal</Text>
                         <Text style={styles.summaryValue}>
@@ -322,7 +345,7 @@ const OrderConfirmation = () => {
 
                 {/* Shipping & Payment Info */}
                 <View style={styles.infoRow}>
-                    {/* Shipping Information - REAL DATA */}
+                    {/* Shipping Information */}
                     <View style={[styles.card, styles.halfCard]}>
                         <View style={styles.cardHeader}>
                             <Ionicons name="location-outline" size={20} color="#2563EB" />
@@ -331,15 +354,15 @@ const OrderConfirmation = () => {
                         {orderDetails?.shippingInfo ? (
                             <View style={styles.shippingInfo}>
                                 <Text style={styles.shippingName}>{orderDetails.shippingInfo.fullName}</Text>
-                                <Text style={styles.shippingAddress}>{orderDetails.shippingInfo.address}</Text>
-                                <Text style={styles.shippingCity}>
-                                    {orderDetails.shippingInfo.city}, {orderDetails.shippingInfo.state} {orderDetails.shippingInfo.zipCode}
+                                <Text style={styles.shippingAddress}>
+                                    {orderDetails.shippingInfo.address}, {orderDetails.shippingInfo.city}
                                 </Text>
-                                <Text style={styles.shippingCountry}>{orderDetails.shippingInfo.country}</Text>
+                                <Text style={styles.shippingAddress}>
+                                    {orderDetails.shippingInfo.state} {orderDetails.shippingInfo.zipCode}, {orderDetails.shippingInfo.country}
+                                </Text>
                                 {orderDetails.shippingInfo.phone && (
                                     <Text style={styles.shippingPhone}>
-                                        <Ionicons name="call-outline" size={14} color="#6B7280" />
-                                        {orderDetails.shippingInfo.phone}
+                                        <Ionicons name="call-outline" size={14} color="#6B7280" /> {orderDetails.shippingInfo.phone}
                                     </Text>
                                 )}
                             </View>
@@ -364,33 +387,6 @@ const OrderConfirmation = () => {
                         <Text style={styles.paymentAmount}>{formatCurrency(orderDetails?.total)}</Text>
                     </View>
                 </View>
-
-                {/* Next Steps */}
-                <View style={styles.nextStepsCard}>
-                    <Text style={styles.nextStepsTitle}>What's Next?</Text>
-                    <View style={styles.nextStep}>
-                        <View style={styles.nextStepIcon}>
-                            <Ionicons name="mail-outline" size={20} color="#2563EB" />
-                        </View>
-                        <Text style={styles.nextStepText}>You'll receive an email confirmation shortly</Text>
-                    </View>
-                    <View style={styles.nextStep}>
-                        <View style={styles.nextStepIcon}>
-                            <Ionicons name="time-outline" size={20} color="#2563EB" />
-                        </View>
-                        <Text style={styles.nextStepText}>We'll notify you when your order ships</Text>
-                    </View>
-                    <View style={styles.nextStep}>
-                        <View style={styles.nextStepIcon}>
-                            <Ionicons name="calendar-outline" size={20} color="#2563EB" />
-                        </View>
-                        <Text style={styles.nextStepText}>
-                            Expected delivery: {formatDate(orderDetails?.estimatedDelivery)}
-                        </Text>
-                    </View>
-                </View>
-
-                <View style={styles.bottomSpacer} />
             </ScrollView>
 
             {/* Fixed Action Buttons */}
@@ -461,25 +457,26 @@ const styles = StyleSheet.create({
         flex: 1,
     },
     scrollContent: {
-        paddingBottom: 120, // Space for fixed buttons
+        paddingBottom: 120,
+        paddingHorizontal: 16,
     },
     successBanner: {
         backgroundColor: 'white',
-        margin: 16,
+        marginTop: 16,
         padding: 24,
         borderRadius: 20,
         alignItems: 'center',
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.08,
         shadowRadius: 16,
-        elevation: 8,
+        elevation: 6,
     },
     successIconContainer: {
         marginBottom: 16,
     },
     successTitle: {
-        fontSize: 24,
+        fontSize: 26,
         fontWeight: 'bold',
         color: '#10B981',
         marginBottom: 8,
@@ -490,7 +487,7 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         textAlign: 'center',
         lineHeight: 22,
-        marginBottom: 16,
+        marginBottom: 20,
     },
     orderNumberBadge: {
         backgroundColor: '#EFF6FF',
@@ -499,27 +496,47 @@ const styles = StyleSheet.create({
         borderRadius: 20,
         borderWidth: 1,
         borderColor: '#DBEAFE',
+        marginBottom: 16,
     },
     orderNumberText: {
         fontSize: 14,
         fontWeight: '700',
         color: '#2563EB',
     },
+    deliveryEstimateBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#F0FDF4',
+        paddingVertical: 8,
+        paddingHorizontal: 16,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#DCFCE7',
+    },
+    deliveryEstimateText: {
+        fontSize: 14,
+        color: '#10B981',
+        marginLeft: 8,
+        fontWeight: '500',
+    },
+    deliveryEstimateDate: {
+        fontWeight: '700',
+        color: '#047857',
+    },
     timelineCard: {
         backgroundColor: 'white',
-        marginHorizontal: 16,
-        marginTop: 8,
+        marginTop: 16,
         padding: 20,
         borderRadius: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.05,
         shadowRadius: 8,
-        elevation: 4,
+        elevation: 2,
     },
-    timelineTitle: {
+    sectionTitle: {
         fontSize: 18,
-        fontWeight: 'bold',
+        fontWeight: '700',
         color: '#1F2937',
         marginBottom: 20,
     },
@@ -529,10 +546,6 @@ const styles = StyleSheet.create({
     timelineStep: {
         flexDirection: 'row',
         alignItems: 'flex-start',
-        marginBottom: 8,
-    },
-    timelineStepActive: {
-        // Active step styles
     },
     timelineDot: {
         width: 24,
@@ -541,22 +554,45 @@ const styles = StyleSheet.create({
         backgroundColor: '#10B981',
         justifyContent: 'center',
         alignItems: 'center',
-        marginRight: 12,
+        marginRight: 16,
         marginTop: 2,
+        borderWidth: 2,
+        borderColor: 'transparent',
+    },
+    timelineDotInner: {
+        width: 10,
+        height: 10,
+        borderRadius: 5,
+        backgroundColor: '#FFFFFF',
+    },
+    timelineDotInnerActive: {
+        backgroundColor: '#2563EB',
+    },
+    timelineDotComplete: {
+        backgroundColor: '#10B981',
+        borderColor: '#10B981',
+    },
+    timelineDotActive: {
+        backgroundColor: '#FFFFFF',
+        borderColor: '#2563EB',
     },
     timelineDotUpcoming: {
         backgroundColor: '#E5E7EB',
-        borderWidth: 2,
         borderColor: '#D1D5DB',
     },
     timelineStepContent: {
         flex: 1,
+        paddingBottom: 10,
     },
     timelineStepTitle: {
         fontSize: 16,
         fontWeight: '600',
         color: '#1F2937',
         marginBottom: 4,
+    },
+    timelineStepTitleActive: {
+        color: '#2563EB',
+        fontWeight: '700',
     },
     timelineStepDescription: {
         fontSize: 14,
@@ -565,31 +601,33 @@ const styles = StyleSheet.create({
     },
     timelineConnector: {
         width: 2,
-        height: 20,
+        height: 30,
         backgroundColor: '#E5E7EB',
         marginLeft: 11,
-        marginBottom: 8,
+        marginVertical: -6,
+    },
+    timelineConnectorActive: {
+        backgroundColor: '#10B981',
     },
     card: {
         backgroundColor: 'white',
-        marginHorizontal: 16,
         marginTop: 16,
         padding: 20,
         borderRadius: 16,
         shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
+        shadowOpacity: 0.05,
         shadowRadius: 8,
-        elevation: 4,
+        elevation: 2,
     },
     halfCard: {
         flex: 1,
-        marginHorizontal: 8,
+        marginTop: 0,
     },
     infoRow: {
         flexDirection: 'row',
-        marginHorizontal: 8,
-        gap: 8,
+        marginTop: 16,
+        gap: 16,
     },
     cardHeader: {
         flexDirection: 'row',
@@ -602,24 +640,18 @@ const styles = StyleSheet.create({
         color: '#1F2937',
         marginLeft: 8,
     },
-    sectionTitle: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
-        marginBottom: 16,
-    },
     orderItem: {
         flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginBottom: 16,
-        padding: 12,
+        alignItems: 'center',
+        marginBottom: 12,
+        padding: 10,
         backgroundColor: '#F8FAFC',
-        borderRadius: 12,
+        borderRadius: 10,
     },
     itemImageContainer: {
         position: 'relative',
-        width: 60,
-        height: 60,
+        width: 50,
+        height: 50,
         borderRadius: 8,
         overflow: 'hidden',
         marginRight: 12,
@@ -629,8 +661,8 @@ const styles = StyleSheet.create({
         height: '100%',
     },
     itemImagePlaceholder: {
-        width: 60,
-        height: 60,
+        width: 50,
+        height: 50,
         backgroundColor: '#F3F4F6',
         borderRadius: 8,
         justifyContent: 'center',
@@ -641,7 +673,7 @@ const styles = StyleSheet.create({
         ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: 'rgba(0,0,0,0.1)',
+        backgroundColor: 'rgba(255,255,255,0.7)',
     },
     itemDetails: {
         flex: 1,
@@ -651,28 +683,21 @@ const styles = StyleSheet.create({
         fontSize: 14,
         fontWeight: '600',
         color: '#374151',
-        marginBottom: 4,
-        lineHeight: 18,
+        marginBottom: 2,
     },
     itemPrice: {
         fontSize: 13,
         color: '#6B7280',
-        marginBottom: 2,
     },
-    itemSize: {
+    itemVariant: {
         fontSize: 12,
         color: '#9CA3AF',
-        marginBottom: 1,
-    },
-    itemColor: {
-        fontSize: 12,
-        color: '#9CA3AF',
+        marginTop: 2,
     },
     itemTotal: {
         fontSize: 15,
         fontWeight: '700',
         color: '#1F2937',
-        alignSelf: 'flex-start',
     },
     noItemsContainer: {
         alignItems: 'center',
@@ -689,8 +714,7 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#6B7280',
         fontStyle: 'italic',
-        textAlign: 'center',
-        padding: 16,
+        paddingVertical: 10,
     },
     divider: {
         height: 1,
@@ -716,15 +740,15 @@ const styles = StyleSheet.create({
     summaryValue: {
         fontSize: 15,
         color: '#374151',
-        fontWeight: '500',
+        fontWeight: '600',
     },
     totalLabel: {
-        fontSize: 17,
+        fontSize: 18,
         fontWeight: '700',
         color: '#1F2937',
     },
     totalAmount: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: 'bold',
         color: '#2563EB',
     },
@@ -732,34 +756,23 @@ const styles = StyleSheet.create({
         // Shipping info styles
     },
     shippingName: {
-        fontSize: 16,
+        fontSize: 15,
         fontWeight: '600',
         color: '#1F2937',
-        marginBottom: 6,
+        marginBottom: 4,
     },
     shippingAddress: {
         fontSize: 14,
         color: '#374151',
-        marginBottom: 4,
+        marginBottom: 2,
         lineHeight: 18,
-    },
-    shippingCity: {
-        fontSize: 14,
-        color: '#374151',
-        marginBottom: 4,
-        lineHeight: 18,
-    },
-    shippingCountry: {
-        fontSize: 14,
-        color: '#374151',
-        marginBottom: 8,
     },
     shippingPhone: {
         fontSize: 14,
         color: '#6B7280',
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 4,
+        marginTop: 8,
     },
     paymentInfo: {
         flexDirection: 'row',
@@ -794,40 +807,6 @@ const styles = StyleSheet.create({
     },
     paidText: {
         color: '#FFFFFF',
-    },
-    nextStepsCard: {
-        backgroundColor: '#F0F9FF',
-        margin: 16,
-        padding: 20,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: '#BAE6FD',
-    },
-    nextStepsTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#0369A1',
-        marginBottom: 16,
-    },
-    nextStep: {
-        flexDirection: 'row',
-        alignItems: 'flex-start',
-        marginBottom: 16,
-    },
-    nextStepIcon: {
-        width: 32,
-        alignItems: 'center',
-        marginRight: 12,
-        marginTop: 2,
-    },
-    nextStepText: {
-        fontSize: 15,
-        color: '#0C4A6E',
-        flex: 1,
-        lineHeight: 20,
-    },
-    bottomSpacer: {
-        height: 20,
     },
     footer: {
         position: 'absolute',

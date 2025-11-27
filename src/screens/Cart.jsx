@@ -7,6 +7,7 @@ import {
     StyleSheet,
     Image,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,7 +15,7 @@ import { useCart } from '../context/CartContext';
 import { useNavigation } from '@react-navigation/native';
 
 const Cart = () => {
-    const { cartItems, updateQuantity, removeFromCart, getCartTotal, clearCart } = useCart();
+    const { cartItems, updateQuantity, removeFromCart, getCartTotal, clearCart, loading } = useCart();
     const navigation = useNavigation();
 
     const handleCheckout = () => {
@@ -25,8 +26,22 @@ const Cart = () => {
         navigation.navigate('Checkout');
     };
 
+    const handleClearCart = () => {
+        Alert.alert(
+            'Clear Cart',
+            'Are you sure you want to clear your entire cart?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Clear All',
+                    style: 'destructive',
+                    onPress: () => clearCart()
+                }
+            ]
+        );
+    };
+
     const CartItem = ({ item }) => {
-        // Get the first image from the images array or use a fallback
         const productImage = item.images && item.images.length > 0
             ? item.images[0]
             : 'https://images.unsplash.com/photo-1498049794561-7780e7231661?w=500&h=500&fit=crop';
@@ -39,7 +54,7 @@ const Cart = () => {
                     resizeMode="cover"
                 />
                 <View style={styles.itemDetails}>
-                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemName} numberOfLines={2}>{item.name}</Text>
                     <Text style={styles.itemBrand}>{item.brand}</Text>
                     <Text style={styles.itemPrice}>${item.price}</Text>
                     <View style={styles.quantityContainer}>
@@ -67,6 +82,17 @@ const Cart = () => {
             </View>
         );
     };
+
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#2563EB" />
+                    <Text style={styles.loadingText}>Loading cart...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
 
     if (cartItems.length === 0) {
         return (
@@ -99,7 +125,7 @@ const Cart = () => {
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
                 <Text style={styles.title}>Shopping Cart</Text>
-                <TouchableOpacity onPress={clearCart}>
+                <TouchableOpacity onPress={handleClearCart}>
                     <Text style={styles.clearText}>Clear All</Text>
                 </TouchableOpacity>
             </View>
@@ -111,6 +137,7 @@ const Cart = () => {
                 renderItem={({ item }) => <CartItem item={item} />}
                 style={styles.cartList}
                 contentContainerStyle={styles.cartContent}
+                showsVerticalScrollIndicator={false}
             />
 
             {/* Footer with Total and Checkout */}
@@ -131,6 +158,16 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8FAFC',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#6B7280',
     },
     header: {
         flexDirection: 'row',
@@ -180,12 +217,14 @@ const styles = StyleSheet.create({
     itemDetails: {
         flex: 1,
         marginLeft: 12,
+        justifyContent: 'space-between',
     },
     itemName: {
         fontSize: 16,
         fontWeight: '600',
         color: '#333',
         marginBottom: 4,
+        lineHeight: 20,
     },
     itemBrand: {
         fontSize: 14,
@@ -217,12 +256,18 @@ const styles = StyleSheet.create({
     },
     removeButton: {
         padding: 8,
+        alignSelf: 'flex-start',
     },
     footer: {
         backgroundColor: 'white',
         padding: 16,
         borderTopWidth: 1,
         borderTopColor: '#E5E7EB',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+        elevation: 8,
     },
     totalContainer: {
         flexDirection: 'row',
@@ -245,6 +290,11 @@ const styles = StyleSheet.create({
         paddingVertical: 16,
         borderRadius: 12,
         alignItems: 'center',
+        shadowColor: '#2563EB',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 4,
     },
     checkoutText: {
         color: 'white',
@@ -269,6 +319,7 @@ const styles = StyleSheet.create({
         color: '#666',
         textAlign: 'center',
         marginBottom: 24,
+        lineHeight: 22,
     },
     continueShoppingButton: {
         backgroundColor: '#2563EB',

@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import {
+import React, { useState, useEffect, useRef } from 'react';
+import { // Added useRef
     View,
     Text,
     ScrollView,
@@ -8,6 +8,9 @@ import {
     Alert,
     ActivityIndicator,
     RefreshControl,
+    Image,
+    Dimensions,
+    Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,30 +19,59 @@ import { useAuth } from '../context/AuthContext';
 import { firestore } from '../firebase/config';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
 
+const { width } = Dimensions.get('window');
+
 const OrderHistory = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
+
+    // Use a ref to track if the component is mounted for cleanup
+    const isMounted = useRef(true);
 
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
 
+    const [isFilterVisible, setIsFilterVisible] = useState(false);
+    const [filterStatus, setFilterStatus] = useState('All');
+
     useEffect(() => {
+        // Set up the cleanup function
+        isMounted.current = true;
+
         if (user?.uid) {
             fetchOrders();
         }
-    }, [user?.uid]);
+
+        return () => {
+            // This runs when the component is unmounted (page is destroyed)
+            isMounted.current = false;
+        };
+    }, [user?.uid, filterStatus]);
 
     const fetchOrders = async () => {
+        // Safe to call setLoading(true) since this is synchronous at the start
+        setLoading(true);
+
         try {
-            setLoading(true);
             const ordersRef = collection(firestore, 'orders');
-            const q = query(
-                ordersRef,
-                where('userId', '==', user.uid),
-                orderBy('createdAt', 'desc')
-            );
+
+            let q;
+            if (filterStatus === 'All') {
+                q = query(
+                    ordersRef,
+                    where('userId', '==', user.uid),
+                    orderBy('createdAt', 'desc')
+                );
+            } else {
+                q = query(
+                    ordersRef,
+                    where('userId', '==', user.uid),
+                    where('status', '==', filterStatus.toLowerCase()),
+                    orderBy('createdAt', 'desc')
+                );
+            }
 
             const querySnapshot = await getDocs(q);
             const ordersData = [];
@@ -47,7 +79,6 @@ const OrderHistory = () => {
             for (const docSnap of querySnapshot.docs) {
                 const orderData = docSnap.data();
 
-                // Fetch product details for each item in the order
                 const itemsWithDetails = await Promise.all(
                     orderData.items.map(async (item) => {
                         try {
@@ -59,7 +90,7 @@ const OrderHistory = () => {
                                 return {
                                     ...item,
                                     productName: productData.name,
-                                    productImage: productData.images?.[0] || '📦',
+                                    productImage: productData.images?.[0] || null,
                                     productPrice: productData.price,
                                 };
                             }
@@ -78,13 +109,20 @@ const OrderHistory = () => {
                 });
             }
 
-            setOrders(ordersData);
+            // Only update state if the component is still mounted
+            if (isMounted.current) {
+                setOrders(ordersData);
+            }
         } catch (error) {
             console.error('Error fetching orders:', error);
+            // Alert is usually safe, but check for state updates
             Alert.alert('Error', 'Failed to load orders. Please try again.');
         } finally {
-            setLoading(false);
-            setRefreshing(false);
+            // Only update state if the component is still mounted
+            if (isMounted.current) {
+                setLoading(false);
+                setRefreshing(false);
+            }
         }
     };
 
@@ -104,6 +142,7 @@ const OrderHistory = () => {
     };
 
     const formatCurrency = (amount) => {
+        if (amount === undefined || amount === null) return '$0.00';
         return `$${parseFloat(amount).toFixed(2)}`;
     };
 
@@ -137,17 +176,78 @@ const OrderHistory = () => {
         }
     };
 
+    const handleReorder = (order) => {
+        Alert.alert(
+            'Reorder Items',
+            'Would you like to add these items to your cart?',
+            [
+                {
+                    text: 'Cancel',
+                    style: 'cancel'
+                },
+                {
+                    text: 'Add to Cart',
+                    onPress: () => {
+                        Alert.alert('Success', 'Items added to cart!');
+                        navigation.navigate('Cart');
+                    }
+                }
+            ]
+        );
+    };
+
+    const handleSelectFilter = (status) => {
+        setFilterStatus(status);
+        setIsFilterVisible(false);
+    };
+
+    const ProductImage = ({ uri }) => {
+        const [imageError, setImageError] = useState(false);
+        const [imageLoading, setImageLoading] = useState(true);
+
+        const handleImageError = () => {
+            setImageError(true);
+            setImageLoading(false);
+        };
+
+        if (imageError || !uri) {
+            return (
+                <View style={styles.itemImagePlaceholder}>
+                    <Ionicons name="image-outline" size={24} color="#9CA3AF" />
+                </View>
+            );
+        }
+
+        return (
+            <View style={styles.itemImageContainer}>
+                <Image
+                    source={{ uri: uri }}
+                    style={styles.itemImage}
+                    resizeMode="cover"
+                    onError={handleImageError}
+                    onLoad={() => setImageLoading(false)}
+                />
+                {imageLoading && (
+                    <View style={styles.imageLoading}>
+                        <ActivityIndicator size="small" color="#2563EB" />
+                    </View>
+                )}
+            </View>
+        );
+    };
+
     const OrderCard = ({ order }) => (
         <TouchableOpacity
             style={styles.orderCard}
             onPress={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+            activeOpacity={0.8}
         >
             <View style={styles.orderHeader}>
                 <View style={styles.orderInfo}>
                     <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
                     <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '20' }]}>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '1A' }]}>
                     <Ionicons
                         name={getStatusIcon(order.status)}
                         size={16}
@@ -161,7 +261,7 @@ const OrderHistory = () => {
 
             <View style={styles.orderSummary}>
                 <Text style={styles.itemsCount}>
-                    {order.items?.length} item{order.items?.length !== 1 ? 's' : ''}
+                    {order.items?.length} item{order.items?.length !== 1 ? 's' : ''} • {order.items?.[0]?.productName} {order.items.length > 1 ? 'and more' : ''}
                 </Text>
                 <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
             </View>
@@ -170,17 +270,15 @@ const OrderHistory = () => {
                 <View style={styles.orderDetails}>
                     <View style={styles.divider} />
 
-                    <Text style={styles.detailsTitle}>Order Details</Text>
+                    <Text style={styles.detailsTitle}>Items Ordered</Text>
 
                     {order.items?.map((item, index) => (
                         <View key={index} style={styles.orderItem}>
-                            <View style={styles.itemImagePlaceholder}>
-                                <Text style={styles.itemEmoji}>{item.productImage}</Text>
-                            </View>
+                            <ProductImage uri={item.productImage} />
                             <View style={styles.itemDetails}>
-                                <Text style={styles.itemName}>{item.productName || item.name}</Text>
+                                <Text style={styles.itemName} numberOfLines={2}>{item.productName || item.name}</Text>
                                 <Text style={styles.itemPrice}>
-                                    {formatCurrency(item.productPrice || item.price)} × {item.quantity}
+                                    Qty: {item.quantity} | {formatCurrency(item.productPrice || item.price)}
                                 </Text>
                             </View>
                             <Text style={styles.itemTotal}>
@@ -189,78 +287,79 @@ const OrderHistory = () => {
                         </View>
                     ))}
 
-                    {/* Shipping Information from Checkout */}
-                    {order.shippingInfo && (
-                        <View style={styles.shippingSection}>
-                            <Text style={styles.sectionLabel}>Shipping Information</Text>
-                            <View style={styles.shippingDetails}>
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionLabel}>Shipping Information</Text>
+                        {order.shippingInfo ? (
+                            <View style={styles.sectionContent}>
                                 <Text style={styles.shippingName}>{order.shippingInfo.fullName}</Text>
-                                <Text style={styles.shippingAddress}>{order.shippingInfo.address}</Text>
-                                <Text style={styles.shippingCity}>
-                                    {order.shippingInfo.city}, {order.shippingInfo.state} {order.shippingInfo.zipCode}
+                                <Text style={styles.detailText}>{order.shippingInfo.address}, {order.shippingInfo.city}</Text>
+                                <Text style={styles.detailText}>
+                                    {order.shippingInfo.state} {order.shippingInfo.zipCode}, {order.shippingInfo.country}
                                 </Text>
-                                <Text style={styles.shippingCountry}>{order.shippingInfo.country}</Text>
-                                <Text style={styles.shippingPhone}>📞 {order.shippingInfo.phone}</Text>
-                                <Text style={styles.shippingEmail}>✉️ {order.shippingInfo.email}</Text>
+                                <Text style={styles.detailText}><Ionicons name="call-outline" size={12} color="#6B7280" /> {order.shippingInfo.phone}</Text>
                             </View>
-                        </View>
-                    )}
+                        ) : (
+                            <Text style={styles.noDetailText}>No shipping info available.</Text>
+                        )}
+                    </View>
 
-                    {/* Payment Information */}
-                    <View style={styles.paymentSection}>
-                        <Text style={styles.sectionLabel}>Payment Information</Text>
-                        <View style={styles.paymentDetails}>
-                            <View style={styles.paymentMethod}>
-                                <Ionicons name="card-outline" size={16} color="#6B7280" />
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionLabel}>Payment</Text>
+                        <View style={styles.sectionContent}>
+                            <View style={styles.paymentRow}>
+                                <Text style={styles.detailText}>Method:</Text>
                                 <Text style={styles.paymentText}>{order.paymentMethod || 'Credit Card'}</Text>
                             </View>
-                            <View style={[styles.statusBadge, { backgroundColor: '#10B98120' }]}>
-                                <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                                <Text style={[styles.statusText, { color: '#10B981' }]}>Paid</Text>
+                            <View style={styles.paymentRow}>
+                                <Text style={styles.detailText}>Status:</Text>
+                                <View style={[styles.paidBadge]}>
+                                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                                    <Text style={[styles.statusText, { color: '#10B981' }]}>Paid</Text>
+                                </View>
                             </View>
                         </View>
                     </View>
 
-                    {/* Order Summary */}
-                    <View style={styles.summarySection}>
-                        <Text style={styles.sectionLabel}>Order Summary</Text>
-                        <View style={styles.summaryRow}>
-                            <Text style={styles.summaryLabel}>Subtotal</Text>
-                            <Text style={styles.summaryValue}>{formatCurrency(order.subtotal || order.total)}</Text>
-                        </View>
-                        {order.shippingCost > 0 && (
+                    <View style={styles.sectionContainer}>
+                        <Text style={styles.sectionLabel}>Summary</Text>
+                        <View style={styles.sectionContent}>
                             <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Shipping</Text>
-                                <Text style={styles.summaryValue}>{formatCurrency(order.shippingCost)}</Text>
+                                <Text style={styles.summaryLabel}>Subtotal</Text>
+                                <Text style={styles.summaryValue}>{formatCurrency(order.subtotal || order.total)}</Text>
                             </View>
-                        )}
-                        {order.tax > 0 && (
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Tax</Text>
-                                <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
+                            {order.shippingCost > 0 && (
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>Shipping</Text>
+                                    <Text style={styles.summaryValue}>{formatCurrency(order.shippingCost)}</Text>
+                                </View>
+                            )}
+                            {order.tax > 0 && (
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>Tax</Text>
+                                    <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
+                                </View>
+                            )}
+                            <View style={[styles.summaryRow, styles.totalRow]}>
+                                <Text style={styles.totalLabel}>Order Total</Text>
+                                <Text style={styles.totalValue}>{formatCurrency(order.total)}</Text>
                             </View>
-                        )}
-                        <View style={[styles.summaryRow, styles.totalRow]}>
-                            <Text style={styles.totalLabel}>Total</Text>
-                            <Text style={styles.totalValue}>{formatCurrency(order.total)}</Text>
                         </View>
                     </View>
 
-                    {/* Action Buttons */}
                     <View style={styles.actionButtons}>
                         <TouchableOpacity
                             style={styles.reorderButton}
                             onPress={() => handleReorder(order)}
                         >
-                            <Ionicons name="cart" size={16} color="#2563EB" />
+                            <Ionicons name="cart" size={16} color="#FFFFFF" />
                             <Text style={styles.reorderButtonText}>Reorder</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                             style={styles.helpButton}
-                            onPress={() => navigation.navigate('Profile')}
+                            onPress={() => Alert.alert('Get Help', `Support for order #${order.orderNumber}`)}
                         >
-                            <Ionicons name="help-circle-outline" size={16} color="#6B7280" />
+                            <Ionicons name="help-circle-outline" size={16} color="#2563EB" />
                             <Text style={styles.helpButtonText}>Get Help</Text>
                         </TouchableOpacity>
                     </View>
@@ -269,24 +368,45 @@ const OrderHistory = () => {
         </TouchableOpacity>
     );
 
-    const handleReorder = (order) => {
-        Alert.alert(
-            'Reorder Items',
-            'Would you like to add these items to your cart?',
-            [
-                {
-                    text: 'Cancel',
-                    style: 'cancel'
-                },
-                {
-                    text: 'Add to Cart',
-                    onPress: () => {
-                        // In a real app, you would add items to cart here
-                        Alert.alert('Success', 'Items added to cart!');
-                        navigation.navigate('Cart');
-                    }
-                }
-            ]
+    const renderFilterModal = () => {
+        const statuses = ['All', 'Delivered', 'Shipped', 'Processing', 'Cancelled'];
+
+        return (
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={isFilterVisible}
+                onRequestClose={() => setIsFilterVisible(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setIsFilterVisible(false)}
+                >
+                    <View style={styles.modalContainer}>
+                        <View style={styles.filterBox}>
+                            <Text style={styles.filterModalTitle}>Filter by Status</Text>
+                            {statuses.map((status) => (
+                                <TouchableOpacity
+                                    key={status}
+                                    style={styles.filterOption}
+                                    onPress={() => handleSelectFilter(status)}
+                                >
+                                    <Text style={[
+                                        styles.filterOptionText,
+                                        filterStatus === status && styles.filterOptionTextSelected,
+                                    ]}>
+                                        {status}
+                                    </Text>
+                                    {filterStatus === status && (
+                                        <Ionicons name="checkmark-circle" size={20} color="#2563EB" />
+                                    )}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         );
     };
 
@@ -301,7 +421,6 @@ const OrderHistory = () => {
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
-            {/* Header */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
@@ -333,7 +452,7 @@ const OrderHistory = () => {
                         </Text>
                         <TouchableOpacity
                             style={styles.shopButton}
-                            onPress={() => navigation.navigate('Home')}
+                            onPress={() => navigation.navigate('HomeTab')}
                         >
                             <Text style={styles.shopButtonText}>Start Shopping</Text>
                         </TouchableOpacity>
@@ -342,14 +461,16 @@ const OrderHistory = () => {
                     <>
                         <View style={styles.ordersHeader}>
                             <Text style={styles.ordersCount}>
-                                {orders.length} order{orders.length !== 1 ? 's' : ''}
+                                {orders.length} {filterStatus !== 'All' ? filterStatus.toLowerCase() : 'total'} order{orders.length !== 1 ? 's' : ''} found
                             </Text>
                             <TouchableOpacity
                                 style={styles.filterButton}
-                                onPress={() => Alert.alert('Filter', 'Filter by status coming soon!')}
+                                onPress={() => setIsFilterVisible(true)}
                             >
-                                <Ionicons name="filter" size={20} color="#6B7280" />
-                                <Text style={styles.filterText}>Filter</Text>
+                                <Ionicons name="filter" size={20} color="#2563EB" />
+                                <Text style={[styles.filterText, { color: '#2563EB' }]}>
+                                    Filter: <Text style={{ fontWeight: '700' }}>{filterStatus}</Text>
+                                </Text>
                             </TouchableOpacity>
                         </View>
 
@@ -361,6 +482,8 @@ const OrderHistory = () => {
                     </>
                 )}
             </ScrollView>
+
+            {renderFilterModal()}
         </SafeAreaView>
     );
 };
@@ -394,9 +517,9 @@ const styles = StyleSheet.create({
         padding: 4,
     },
     headerTitle: {
-        fontSize: 20,
+        fontSize: 22,
         fontWeight: 'bold',
-        color: '#333',
+        color: '#1F2937',
     },
     placeholder: {
         width: 32,
@@ -439,7 +562,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
+        paddingHorizontal: 16,
+        paddingTop: 16,
         paddingBottom: 8,
     },
     ordersCount: {
@@ -450,7 +574,10 @@ const styles = StyleSheet.create({
     filterButton: {
         flexDirection: 'row',
         alignItems: 'center',
-        padding: 8,
+        padding: 4,
+        paddingHorizontal: 8,
+        borderRadius: 8,
+        backgroundColor: '#DBEAFE',
     },
     filterText: {
         fontSize: 14,
@@ -461,25 +588,25 @@ const styles = StyleSheet.create({
         backgroundColor: 'white',
         marginHorizontal: 16,
         marginBottom: 12,
-        padding: 16,
-        borderRadius: 12,
+        padding: 20,
+        borderRadius: 16,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
         elevation: 2,
     },
     orderHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'flex-start',
-        marginBottom: 12,
+        marginBottom: 16,
     },
     orderInfo: {
         flex: 1,
     },
     orderNumber: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#1F2937',
         marginBottom: 4,
@@ -491,15 +618,15 @@ const styles = StyleSheet.create({
     statusBadge: {
         flexDirection: 'row',
         alignItems: 'center',
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 6,
+        borderRadius: 16,
         marginLeft: 8,
     },
     statusText: {
-        fontSize: 12,
-        fontWeight: '600',
-        marginLeft: 4,
+        fontSize: 13,
+        fontWeight: '700',
+        marginLeft: 6,
     },
     orderSummary: {
         flexDirection: 'row',
@@ -511,7 +638,7 @@ const styles = StyleSheet.create({
         color: '#6B7280',
     },
     orderTotal: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#2563EB',
     },
@@ -521,119 +648,113 @@ const styles = StyleSheet.create({
     divider: {
         height: 1,
         backgroundColor: '#E5E7EB',
-        marginVertical: 12,
+        marginVertical: 20,
     },
     detailsTitle: {
         fontSize: 16,
-        fontWeight: '600',
-        color: '#374151',
+        fontWeight: '700',
+        color: '#1F2937',
         marginBottom: 16,
     },
     orderItem: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 12,
+        marginBottom: 16,
+    },
+    itemImageContainer: {
+        position: 'relative',
+        width: 60,
+        height: 60,
+        borderRadius: 8,
+        overflow: 'hidden',
+        marginRight: 12,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
+    },
+    itemImage: {
+        width: '100%',
+        height: '100%',
+    },
+    imageLoading: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(255,255,255,0.7)',
     },
     itemImagePlaceholder: {
-        width: 40,
-        height: 40,
+        width: 60,
+        height: 60,
         backgroundColor: '#F3F4F6',
-        borderRadius: 6,
+        borderRadius: 8,
         justifyContent: 'center',
         alignItems: 'center',
         marginRight: 12,
-    },
-    itemEmoji: {
-        fontSize: 16,
+        borderWidth: 1,
+        borderColor: '#E5E7EB',
     },
     itemDetails: {
         flex: 1,
     },
     itemName: {
-        fontSize: 14,
-        fontWeight: '500',
-        color: '#374151',
-        marginBottom: 2,
+        fontSize: 15,
+        fontWeight: '600',
+        color: '#1F2937',
+        marginBottom: 4,
     },
     itemPrice: {
-        fontSize: 12,
+        fontSize: 13,
         color: '#6B7280',
     },
     itemTotal: {
-        fontSize: 14,
-        fontWeight: '600',
+        fontSize: 16,
+        fontWeight: '700',
         color: '#1F2937',
     },
-    shippingSection: {
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
+    sectionContainer: {
+        paddingVertical: 12,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
     },
-    paymentSection: {
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
-    },
-    summarySection: {
-        backgroundColor: '#F9FAFB',
-        padding: 12,
-        borderRadius: 8,
-        marginBottom: 16,
+    sectionContent: {
+        paddingHorizontal: 4,
     },
     sectionLabel: {
-        fontSize: 14,
+        fontSize: 15,
         fontWeight: '600',
         color: '#374151',
         marginBottom: 8,
     },
-    shippingDetails: {
-        marginLeft: 4,
-    },
     shippingName: {
-        fontSize: 14,
-        fontWeight: '600',
+        fontSize: 15,
+        fontWeight: '700',
         color: '#1F2937',
-        marginBottom: 2,
-    },
-    shippingAddress: {
-        fontSize: 14,
-        color: '#374151',
-        marginBottom: 2,
-    },
-    shippingCity: {
-        fontSize: 14,
-        color: '#374151',
-        marginBottom: 2,
-    },
-    shippingCountry: {
-        fontSize: 14,
-        color: '#374151',
         marginBottom: 4,
     },
-    shippingPhone: {
+    detailText: {
         fontSize: 14,
-        color: '#6B7280',
-        marginBottom: 2,
+        color: '#374151',
+        marginBottom: 3,
     },
-    shippingEmail: {
+    noDetailText: {
         fontSize: 14,
-        color: '#6B7280',
+        color: '#9CA3AF',
+        fontStyle: 'italic',
     },
-    paymentDetails: {
+    paymentRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-    },
-    paymentMethod: {
-        flexDirection: 'row',
-        alignItems: 'center',
+        marginBottom: 4,
     },
     paymentText: {
         fontSize: 14,
         color: '#374151',
-        marginLeft: 6,
+        fontWeight: '600',
+    },
+    paidBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 4,
     },
     summaryRow: {
         flexDirection: 'row',
@@ -644,8 +765,8 @@ const styles = StyleSheet.create({
     totalRow: {
         borderTopWidth: 1,
         borderTopColor: '#E5E7EB',
-        paddingTop: 8,
-        marginTop: 4,
+        paddingTop: 10,
+        marginTop: 8,
     },
     summaryLabel: {
         fontSize: 14,
@@ -654,22 +775,25 @@ const styles = StyleSheet.create({
     summaryValue: {
         fontSize: 14,
         color: '#374151',
-        fontWeight: '500',
+        fontWeight: '600',
     },
     totalLabel: {
-        fontSize: 16,
-        fontWeight: '600',
+        fontSize: 18,
+        fontWeight: '700',
         color: '#1F2937',
     },
     totalValue: {
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: 'bold',
         color: '#2563EB',
     },
     actionButtons: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginTop: 8,
+        marginTop: 20,
+        paddingTop: 16,
+        borderTopWidth: 1,
+        borderTopColor: '#F3F4F6',
     },
     reorderButton: {
         flexDirection: 'row',
@@ -677,15 +801,15 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         flex: 1,
         padding: 12,
-        backgroundColor: '#EFF6FF',
-        borderRadius: 8,
+        backgroundColor: '#2563EB',
+        borderRadius: 10,
         marginRight: 8,
     },
     reorderButtonText: {
-        color: '#2563EB',
+        color: '#FFFFFF',
         fontSize: 14,
-        fontWeight: '600',
-        marginLeft: 6,
+        fontWeight: '700',
+        marginLeft: 8,
     },
     helpButton: {
         flexDirection: 'row',
@@ -693,18 +817,61 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         flex: 1,
         padding: 12,
-        backgroundColor: '#F3F4F6',
-        borderRadius: 8,
+        backgroundColor: '#E5E7EB',
+        borderRadius: 10,
         marginLeft: 8,
+        borderWidth: 1,
+        borderColor: '#DBEAFE'
     },
     helpButtonText: {
-        color: '#6B7280',
+        color: '#2563EB',
         fontSize: 14,
         fontWeight: '600',
-        marginLeft: 6,
+        marginLeft: 8,
     },
     bottomSpacer: {
         height: 20,
+    },
+    // --- Filter Modal Styles ---
+    modalOverlay: {
+        flex: 1,
+        justifyContent: 'flex-end',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalContainer: {
+        width: '100%',
+        backgroundColor: 'white',
+        borderTopLeftRadius: 20,
+        borderTopRightRadius: 20,
+        padding: 20,
+    },
+    filterBox: {
+        backgroundColor: 'white',
+    },
+    filterModalTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#1F2937',
+        marginBottom: 16,
+        borderBottomWidth: 1,
+        borderBottomColor: '#E5E7EB',
+        paddingBottom: 8,
+    },
+    filterOption: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingVertical: 14,
+        borderBottomWidth: 1,
+        borderBottomColor: '#F3F4F6',
+    },
+    filterOptionText: {
+        fontSize: 16,
+        color: '#374151',
+    },
+    filterOptionTextSelected: {
+        fontWeight: '700',
+        color: '#2563EB',
     },
 });
 

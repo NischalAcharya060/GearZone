@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
     View,
     Text,
@@ -8,15 +8,103 @@ import {
     Image,
     ScrollView,
     Alert,
+    ActivityIndicator,
+    RefreshControl, // Add this import
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
+// Firebase imports
+import { firestore } from '../firebase/config';
+import { collection, query, getDocs } from 'firebase/firestore';
+
 const Profile = () => {
     const { user, logout } = useAuth();
     const navigation = useNavigation();
+    const isMounted = useRef(true);
 
+    // State for real-time stats
+    const [orderCount, setOrderCount] = useState(0);
+    const [wishlistCount, setWishlistCount] = useState(0);
+    const [compareCount, setCompareCount] = useState(0);
+    const [statsLoading, setStatsLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false); // Add refreshing state
+
+    // --- Data Fetching Logic ---
+    const fetchStats = async () => {
+        if (!user?.uid) {
+            setStatsLoading(false);
+            return;
+        }
+
+        try {
+            const userId = user.uid;
+
+            // Query nested subcollections under the user document
+            const ordersQuery = query(
+                collection(firestore, 'users', userId, 'orders')
+            );
+            const wishlistQuery = query(
+                collection(firestore, 'users', userId, 'wishlist')
+            );
+            const compareQuery = query(
+                collection(firestore, 'users', userId, 'compare')
+            );
+
+            // Execute Queries concurrently
+            const [ordersSnapshot, wishlistSnapshot, compareSnapshot] = await Promise.all([
+                getDocs(ordersQuery),
+                getDocs(wishlistQuery),
+                getDocs(compareQuery),
+            ]);
+
+            // Only update state if the component is still mounted
+            if (isMounted.current) {
+                setOrderCount(ordersSnapshot.size);
+                setWishlistCount(wishlistSnapshot.size);
+                setCompareCount(compareSnapshot.size);
+            }
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+            // On error, we keep the counts at their initial 0 state
+            if (isMounted.current) {
+                // Set default values on error
+                setOrderCount(0);
+                setWishlistCount(0);
+                setCompareCount(0);
+            }
+        } finally {
+            if (isMounted.current) {
+                setStatsLoading(false);
+                setRefreshing(false); // Stop refreshing when done
+            }
+        }
+    };
+
+    useEffect(() => {
+        isMounted.current = true;
+        setStatsLoading(true);
+        fetchStats();
+
+        // Cleanup function
+        return () => {
+            isMounted.current = false;
+        };
+    }, [user?.uid]);
+
+    // --- Pull to Refresh Handler ---
+    const onRefresh = useCallback(async () => {
+        if (!user?.uid) {
+            setRefreshing(false);
+            return;
+        }
+
+        setRefreshing(true);
+        await fetchStats();
+    }, [user?.uid]);
+
+    // --- Logout Handler ---
     const handleLogout = () => {
         Alert.alert(
             'Logout',
@@ -29,7 +117,11 @@ const Profile = () => {
                     onPress: async () => {
                         try {
                             await logout();
-                            navigation.navigate('HomeTab');
+                            // Navigate to home after logout
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'HomeTab' }],
+                            });
                         } catch (error) {
                             Alert.alert('Error', 'Failed to logout. Please try again.');
                         }
@@ -40,13 +132,48 @@ const Profile = () => {
     };
 
     const menuItems = [
-        { icon: 'person-outline', title: 'Personal Information', color: '#2563EB' },
-        { icon: 'location-outline', title: 'Addresses', color: '#10B981' },
-        { icon: 'card-outline', title: 'Payment Methods', color: '#F59E0B' },
-        { icon: 'document-text-outline', title: 'Order History', color: '#8B5CF6' },
-        { icon: 'heart-outline', title: 'Wishlist', color: '#EC4899' },
-        { icon: 'settings-outline', title: 'Settings', color: '#6B7280' },
-        { icon: 'help-circle-outline', title: 'Help & Support', color: '#EF4444' },
+        {
+            icon: 'person-outline',
+            title: 'Personal Information',
+            color: '#2563EB',
+            onPress: () => Alert.alert('Coming Soon', 'Personal Information feature coming soon!')
+        },
+        {
+            icon: 'location-outline',
+            title: 'Addresses',
+            color: '#10B981',
+            onPress: () => navigation.navigate('Addresses')
+        },
+        {
+            icon: 'card-outline',
+            title: 'Payment Methods',
+            color: '#F59E0B',
+            onPress: () => Alert.alert('Coming Soon', 'Payment Methods feature coming soon!')
+        },
+        {
+            icon: 'document-text-outline',
+            title: 'Order History',
+            color: '#8B5CF6',
+            onPress: () => navigation.navigate('Orders')
+        },
+        {
+            icon: 'heart-outline',
+            title: 'Wishlist',
+            color: '#EC4899',
+            onPress: () => navigation.navigate('WishlistTab')
+        },
+        {
+            icon: 'settings-outline',
+            title: 'Settings',
+            color: '#6B7280',
+            onPress: () => Alert.alert('Coming Soon', 'Settings feature coming soon!')
+        },
+        {
+            icon: 'help-circle-outline',
+            title: 'Help & Support',
+            color: '#EF4444',
+            onPress: () => Alert.alert('Coming Soon', 'Help & Support feature coming soon!')
+        },
     ];
 
     if (!user) {
@@ -71,41 +198,80 @@ const Profile = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <ScrollView showsVerticalScrollIndicator={false}>
+            <ScrollView
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                    <RefreshControl
+                        refreshing={refreshing}
+                        onRefresh={onRefresh}
+                        colors={['#2563EB']} // Android
+                        tintColor="#2563EB" // iOS
+                        title="Refreshing..."
+                        titleColor="#666"
+                    />
+                }
+            >
                 {/* Header */}
                 <View style={styles.header}>
                     <View style={styles.avatarContainer}>
                         <Image
-                            source={{ uri: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150' }}
+                            source={{
+                                uri: user.photoURL || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150'
+                            }}
                             style={styles.avatar}
                         />
-                        <View style={styles.roleBadge}>
+                        <View style={[
+                            styles.roleBadge,
+                            user.role === 'admin' ? styles.adminBadge : styles.userBadge
+                        ]}>
                             <Text style={styles.roleText}>
                                 {user.role === 'admin' ? 'ADMIN' : 'USER'}
                             </Text>
                         </View>
                     </View>
-                    <Text style={styles.userName}>{user.fullName || 'User'}</Text>
+                    <Text style={styles.userName}>
+                        {user.displayName || user.fullName || user.email?.split('@')[0] || 'User'}
+                    </Text>
                     <Text style={styles.userEmail}>{user.email}</Text>
-                    <Text style={styles.userPhone}>{user.phone}</Text>
+                    {user.phoneNumber && (
+                        <Text style={styles.userPhone}>{user.phoneNumber}</Text>
+                    )}
                 </View>
 
-                {/* Stats */}
+                {/* Stats - NOW DYNAMICALLY FETCHED */}
                 <View style={styles.statsContainer}>
-                    <View style={styles.statItem}>
-                        <Text style={styles.statNumber}>12</Text>
-                        <Text style={styles.statLabel}>Orders</Text>
-                    </View>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                        <Text style={styles.statNumber}>8</Text>
-                        <Text style={styles.statLabel}>Wishlist</Text>
-                    </View>
-                    <View style={styles.statDivider} />
-                    <View style={styles.statItem}>
-                        <Text style={styles.statNumber}>2</Text>
-                        <Text style={styles.statLabel}>Compare</Text>
-                    </View>
+                    {statsLoading ? (
+                        <View style={styles.loadingStats}>
+                            <ActivityIndicator size="small" color="#2563EB" />
+                            <Text style={styles.loadingStatsText}>Loading stats...</Text>
+                        </View>
+                    ) : (
+                        <>
+                            <TouchableOpacity
+                                style={styles.statItem}
+                                onPress={() => navigation.navigate('Orders')}
+                            >
+                                <Text style={styles.statNumber}>{orderCount}</Text>
+                                <Text style={styles.statLabel}>Orders</Text>
+                            </TouchableOpacity>
+                            <View style={styles.statDivider} />
+                            <TouchableOpacity
+                                style={styles.statItem}
+                                onPress={() => navigation.navigate('WishlistTab')}
+                            >
+                                <Text style={styles.statNumber}>{wishlistCount}</Text>
+                                <Text style={styles.statLabel}>Wishlist</Text>
+                            </TouchableOpacity>
+                            <View style={styles.statDivider} />
+                            <TouchableOpacity
+                                style={styles.statItem}
+                                onPress={() => navigation.navigate('CompareTab')}
+                            >
+                                <Text style={styles.statNumber}>{compareCount}</Text>
+                                <Text style={styles.statLabel}>Compare</Text>
+                            </TouchableOpacity>
+                        </>
+                    )}
                 </View>
 
                 {/* Admin Panel (Only for admin users) */}
@@ -151,34 +317,7 @@ const Profile = () => {
                         <TouchableOpacity
                             key={index}
                             style={styles.menuItem}
-                            onPress={() => {
-                                // Add navigation handlers for each menu item
-                                switch(item.title) {
-                                    case 'Personal Information':
-                                        // navigation.navigate('PersonalInfo');
-                                        Alert.alert('Coming Soon', 'Personal Information feature coming soon!');
-                                        break;
-                                    case 'Addresses':
-                                        navigation.navigate('Addresses');
-                                        break;
-                                    case 'Order History':
-                                        navigation.navigate('Orders');
-                                        break;
-                                    case 'Wishlist':
-                                        navigation.navigate('WishlistTab');
-                                        break;
-                                    case 'Settings':
-                                        // navigation.navigate('Settings');
-                                        Alert.alert('Coming Soon', 'Settings feature coming soon!');
-                                        break;
-                                    case 'Help & Support':
-                                        // navigation.navigate('HelpSupport');
-                                        Alert.alert('Coming Soon', 'Help & Support feature coming soon!');
-                                        break;
-                                    default:
-                                        break;
-                                }
-                            }}
+                            onPress={item.onPress}
                         >
                             <View style={[styles.menuIcon, { backgroundColor: `${item.color}15` }]}>
                                 <Ionicons name={item.icon} size={20} color={item.color} />
@@ -232,25 +371,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: 32,
         paddingVertical: 12,
         borderRadius: 8,
-        marginBottom: 12,
     },
     signInButtonText: {
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
-    },
-    backToHomeButton: {
-        backgroundColor: '#F3F4F6',
-        paddingHorizontal: 32,
-        paddingVertical: 12,
-        borderRadius: 8,
-        borderWidth: 1,
-        borderColor: '#E5E7EB',
-    },
-    backToHomeButtonText: {
-        color: '#374151',
-        fontSize: 16,
-        fontWeight: '500',
     },
     header: {
         alignItems: 'center',
@@ -272,10 +397,15 @@ const styles = StyleSheet.create({
         position: 'absolute',
         bottom: 0,
         right: 0,
-        backgroundColor: '#2563EB',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 12,
+    },
+    adminBadge: {
+        backgroundColor: '#2563EB',
+    },
+    userBadge: {
+        backgroundColor: '#10B981',
     },
     roleText: {
         color: 'white',
@@ -312,6 +442,17 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.1,
         shadowRadius: 2,
         elevation: 2,
+    },
+    loadingStats: {
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        flexDirection: 'row',
+        gap: 8,
+    },
+    loadingStatsText: {
+        fontSize: 14,
+        color: '#6B7280',
     },
     statItem: {
         flex: 1,

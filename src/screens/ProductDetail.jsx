@@ -31,13 +31,14 @@ const ProductDetail = ({ route, navigation }) => {
 
     const isWishlisted = isInWishlist(product.id);
 
-    // Mock product images (in real app, this would come from product data)
-    const productImages = [
-        product.image,
-        'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500',
-        'https://images.unsplash.com/photo-1484704849700-f032a568e944?w=500',
-        'https://images.unsplash.com/photo-1546435770-a3e426bf472b?w=500',
-    ];
+    // --- MODIFIED IMAGE LOGIC ---
+    // Use product.images array if available, or fall back to product.image in an array.
+    const productImages = product.images && Array.isArray(product.images) && product.images.length > 0
+        ? product.images
+        : [product.image];
+
+    // Fallback URL if no image is present (same as in ProductCard for consistency)
+    const fallbackImage = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
 
     const showLoginAlert = (action) => {
         Alert.alert(
@@ -125,7 +126,7 @@ const ProductDetail = ({ route, navigation }) => {
             ]}
             onPress={() => setSelectedImageIndex(index)}
         >
-            <Image source={{ uri: item }} style={styles.thumbnailImage} />
+            <Image source={{ uri: item || fallbackImage }} style={styles.thumbnailImage} />
         </TouchableOpacity>
     );
 
@@ -136,12 +137,11 @@ const ProductDetail = ({ route, navigation }) => {
         </View>
     );
 
-    // Convert product specifications to array for FlatList
     const specifications = [
         { label: 'Brand', value: product.brand },
         { label: 'Category', value: product.category },
         { label: 'Rating', value: `${product.rating}/5 (${product.reviewCount} reviews)` },
-        ...Object.entries(product.specifications).map(([key, value]) => ({
+        ...Object.entries(product.specifications || {}).map(([key, value]) => ({
             label: key.charAt(0).toUpperCase() + key.slice(1),
             value: Array.isArray(value) ? value.join(', ') : value,
         })),
@@ -149,7 +149,6 @@ const ProductDetail = ({ route, navigation }) => {
 
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
-            {/* Header with Back Button */}
             <View style={styles.header}>
                 <TouchableOpacity
                     style={styles.backButton}
@@ -171,23 +170,41 @@ const ProductDetail = ({ route, navigation }) => {
             </View>
 
             <ScrollView showsVerticalScrollIndicator={false}>
-                {/* Image Gallery */}
                 <View style={styles.imageSection}>
+                    {/* Main Image Display */}
                     <Image
-                        source={{ uri: productImages[selectedImageIndex] }}
+                        source={{ uri: productImages[selectedImageIndex] || fallbackImage }}
                         style={styles.mainImage}
                     />
-                    <FlatList
-                        data={productImages}
-                        horizontal
-                        showsHorizontalScrollIndicator={false}
-                        keyExtractor={(item, index) => index.toString()}
-                        renderItem={renderImageThumbnail}
-                        contentContainerStyle={styles.thumbnailsContainer}
-                    />
+
+                    {/* Image Indicators */}
+                    {productImages.length > 1 && (
+                        <View style={styles.imageIndicators}>
+                            {productImages.map((_, index) => (
+                                <View
+                                    key={index}
+                                    style={[
+                                        styles.imageDot,
+                                        selectedImageIndex === index && styles.imageDotActive,
+                                    ]}
+                                />
+                            ))}
+                        </View>
+                    )}
+
+                    {/* Thumbnails */}
+                    {productImages.length > 1 && (
+                        <FlatList
+                            data={productImages}
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            keyExtractor={(_, index) => index.toString()}
+                            renderItem={renderImageThumbnail}
+                            contentContainerStyle={styles.thumbnailsContainer}
+                        />
+                    )}
                 </View>
 
-                {/* Product Info */}
                 <View style={styles.infoSection}>
                     <View style={styles.brandContainer}>
                         <Text style={styles.brand}>{product.brand}</Text>
@@ -227,7 +244,6 @@ const ProductDetail = ({ route, navigation }) => {
 
                     <Text style={styles.description}>{product.description}</Text>
 
-                    {/* Login Prompt for Non-Logged In Users */}
                     {!user && (
                         <View style={styles.loginPrompt}>
                             <Ionicons name="log-in-outline" size={20} color="#2563EB" />
@@ -244,7 +260,6 @@ const ProductDetail = ({ route, navigation }) => {
                     )}
                 </View>
 
-                {/* Quantity Selector - Only show for logged in users */}
                 {user && (
                     <View style={styles.quantitySection}>
                         <Text style={styles.sectionTitle}>Quantity</Text>
@@ -266,7 +281,6 @@ const ProductDetail = ({ route, navigation }) => {
                     </View>
                 )}
 
-                {/* Specifications */}
                 <View style={styles.specsSection}>
                     <Text style={styles.sectionTitle}>Specifications</Text>
                     <FlatList
@@ -277,8 +291,7 @@ const ProductDetail = ({ route, navigation }) => {
                     />
                 </View>
 
-                {/* Features */}
-                {product.specifications.features && (
+                {product.specifications && product.specifications.features && (
                     <View style={styles.featuresSection}>
                         <Text style={styles.sectionTitle}>Key Features</Text>
                         {product.specifications.features.map((feature, index) => (
@@ -290,11 +303,9 @@ const ProductDetail = ({ route, navigation }) => {
                     </View>
                 )}
 
-                {/* Spacer for bottom buttons */}
                 <View style={styles.spacer} />
             </ScrollView>
 
-            {/* Fixed Action Buttons */}
             <View style={styles.actionButtons}>
                 <TouchableOpacity
                     style={[
@@ -391,6 +402,22 @@ const styles = StyleSheet.create({
         width: screenWidth,
         height: 300,
         resizeMode: 'contain',
+    },
+    imageIndicators: {
+        flexDirection: 'row',
+        justifyContent: 'center',
+        marginTop: 16,
+    },
+    imageDot: {
+        height: 8,
+        width: 8,
+        borderRadius: 4,
+        backgroundColor: '#D1D5DB',
+        marginHorizontal: 4,
+    },
+    imageDotActive: {
+        backgroundColor: '#2563EB',
+        width: 24,
     },
     thumbnailsContainer: {
         paddingHorizontal: 16,

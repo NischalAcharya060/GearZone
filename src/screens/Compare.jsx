@@ -9,6 +9,7 @@ import {
     Image,
     ScrollView,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useCompare } from '../context/CompareContext';
@@ -17,8 +18,8 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 
 const Compare = () => {
-    const { compareItems, removeFromCompare, clearCompare } = useCompare();
-    const { addToCart } = useCart();
+    const { compareItems, removeFromCompare, clearCompare, loading } = useCompare();
+    const { addToCart, bulkAddToCart } = useCart();
     const { user } = useAuth();
     const navigation = useNavigation();
 
@@ -44,16 +45,49 @@ const Compare = () => {
         );
     };
 
-    const handleAddToCart = (item) => {
+    const handleAddToCart = async (item) => {
         if (!user) {
             showLoginAlert('add items to cart');
             return;
         }
 
-        const result = addToCart(item, navigation);
-        if (result && result.success) {
-            Alert.alert('Success', `${item.name} added to cart!`);
+        try {
+            const result = await addToCart(item, navigation);
+            if (result && result.success) {
+                Alert.alert('Success', `${item.name} added to cart!`);
+            }
+        } catch (error) {
+            Alert.alert('Error', 'Failed to add item to cart');
         }
+    };
+
+    const handleAddAllToCart = async () => {
+        if (!user) {
+            showLoginAlert('add items to cart');
+            return;
+        }
+
+        try {
+            await bulkAddToCart(compareItems);
+            Alert.alert('Success', 'All compared items added to cart!');
+        } catch (error) {
+            Alert.alert('Error', 'Failed to add items to cart');
+        }
+    };
+
+    const handleClearCompare = () => {
+        Alert.alert(
+            'Clear Compare List',
+            'Are you sure you want to clear your compare list?',
+            [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                    text: 'Clear All',
+                    style: 'destructive',
+                    onPress: () => clearCompare()
+                }
+            ]
+        );
     };
 
     const CompareItem = ({ item }) => (
@@ -110,6 +144,17 @@ const Compare = () => {
         </View>
     );
 
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.container}>
+                <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#2563EB" />
+                    <Text style={styles.loadingText}>Loading compare list...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
     if (compareItems.length === 0) {
         return (
             <SafeAreaView style={styles.container}>
@@ -153,7 +198,7 @@ const Compare = () => {
                     <Ionicons name="arrow-back" size={24} color="#333" />
                 </TouchableOpacity>
                 <Text style={styles.title}>Compare Products</Text>
-                <TouchableOpacity onPress={clearCompare}>
+                <TouchableOpacity onPress={handleClearCompare}>
                     <Text style={styles.clearText}>Clear All</Text>
                 </TouchableOpacity>
             </View>
@@ -172,6 +217,19 @@ const Compare = () => {
                         <Text style={styles.loginPromptButtonText}>Sign In</Text>
                     </TouchableOpacity>
                 </View>
+            )}
+
+            {/* Add All to Cart Button */}
+            {user && compareItems.length > 0 && (
+                <TouchableOpacity
+                    style={styles.addAllButton}
+                    onPress={handleAddAllToCart}
+                >
+                    <Ionicons name="cart" size={20} color="white" />
+                    <Text style={styles.addAllText}>
+                        Add All to Cart ({compareItems.length})
+                    </Text>
+                </TouchableOpacity>
             )}
 
             {/* Comparison Table */}
@@ -198,18 +256,27 @@ const Compare = () => {
                                           product1={compareItems[0] ? `${compareItems[0].rating}/5` : '-'}
                                           product2={compareItems[1] ? `${compareItems[1].rating}/5` : '-'}
                         />
-                        <SpecificationRow title="Battery"
-                                          product1={compareItems[0]?.specifications?.battery || '-'}
-                                          product2={compareItems[1]?.specifications?.battery || '-'}
+                        <SpecificationRow title="Category"
+                                          product1={compareItems[0]?.category || '-'}
+                                          product2={compareItems[1]?.category || '-'}
                         />
-                        <SpecificationRow title="Connectivity"
-                                          product1={compareItems[0]?.specifications?.connectivity || '-'}
-                                          product2={compareItems[1]?.specifications?.connectivity || '-'}
+                        <SpecificationRow title="Stock"
+                                          product1={compareItems[0]?.stock > 0 ? 'In Stock' : 'Out of Stock'}
+                                          product2={compareItems[1]?.stock > 0 ? 'In Stock' : 'Out of Stock'}
                         />
-                        <SpecificationRow title="Features"
-                                          product1={compareItems[0]?.specifications?.features?.join(', ') || '-'}
-                                          product2={compareItems[1]?.specifications?.features?.join(', ') || '-'}
-                        />
+                        {/* Dynamic specifications */}
+                        {compareItems[0]?.specifications && Object.entries(compareItems[0].specifications).map(([key, value]) => (
+                            <SpecificationRow
+                                key={key}
+                                title={key.charAt(0).toUpperCase() + key.slice(1)}
+                                product1={Array.isArray(value) ? value.join(', ') : String(value)}
+                                product2={compareItems[1]?.specifications?.[key] ?
+                                    (Array.isArray(compareItems[1].specifications[key]) ?
+                                        compareItems[1].specifications[key].join(', ') :
+                                        String(compareItems[1].specifications[key])) :
+                                    '-'}
+                            />
+                        ))}
                     </View>
 
                     {/* Product Columns */}
@@ -617,6 +684,32 @@ const styles = StyleSheet.create({
         borderRadius: 8,
     },
     continueShoppingText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: '600',
+    },
+    loadingContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    loadingText: {
+        marginTop: 16,
+        fontSize: 16,
+        color: '#6B7280',
+    },
+    addAllButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: '#10B981',
+        marginHorizontal: 16,
+        marginVertical: 12,
+        paddingVertical: 12,
+        borderRadius: 8,
+        gap: 8,
+    },
+    addAllText: {
         color: 'white',
         fontSize: 16,
         fontWeight: '600',
