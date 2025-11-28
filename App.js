@@ -31,6 +31,7 @@ import Analytics from './src/screens/admin/Analytics';
 import AddCategory from "./src/screens/admin/AddCategory";
 import Addresses from "./src/screens/Addresses";
 import OrderHistory from "./src/screens/OrderHistory";
+import Notifications from "./src/screens/Notifications";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -57,6 +58,14 @@ const HomeStack = () => {
                 component={Search}
                 options={{
                     title: 'Search Products',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <Stack.Screen
+                name="Notifications"
+                component={Notifications}
+                options={{
+                    title: 'My Notifications',
                     headerBackTitle: 'Back'
                 }}
             />

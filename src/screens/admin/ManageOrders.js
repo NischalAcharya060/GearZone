@@ -27,8 +27,9 @@ import {
     doc,
     updateDoc,
     where,
-    getDoc // ADD THIS IMPORT
+    getDoc
 } from 'firebase/firestore';
+import { notifyOrderStatusUpdate } from '../../services/notificationService';
 
 const ManageOrders = () => {
     const navigation = useNavigation();
@@ -158,11 +159,18 @@ const ManageOrders = () => {
                 updatedBy: user.uid
             });
 
+            // Update local state
             setOrders(prevOrders =>
                 prevOrders.map(order =>
                     order.id === orderId ? { ...order, status: newStatus } : order
                 )
             );
+
+            // SEND NOTIFICATION TO USER
+            const updatedOrder = orders.find(order => order.id === orderId);
+            if (updatedOrder) {
+                await notifyOrderStatusUpdate(updatedOrder, newStatus);
+            }
 
             Alert.alert('Success', `Order status updated to ${newStatus}`);
             setIsModalVisible(false);
@@ -192,6 +200,7 @@ const ManageOrders = () => {
                 cancelledBy: user.uid
             });
 
+            // Update local state
             setOrders(prevOrders =>
                 prevOrders.map(order =>
                     order.id === orderId
@@ -204,6 +213,12 @@ const ManageOrders = () => {
                         : order
                 )
             );
+
+            // SEND CANCELLATION NOTIFICATION TO USER
+            const cancelledOrder = orders.find(order => order.id === orderId);
+            if (cancelledOrder) {
+                await notifyOrderStatusUpdate(cancelledOrder, 'cancelled');
+            }
 
             Alert.alert('Success', 'Order has been cancelled.');
             setIsCancelModalVisible(false);

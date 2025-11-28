@@ -24,7 +24,7 @@ import { Slider } from '@miblanchard/react-native-slider';
 
 // Firebase imports
 import { firestore } from '../firebase/config';
-import { collection, getDocs, query, orderBy, limit } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where, onSnapshot } from 'firebase/firestore';
 
 import ProductCard from '../components/ProductCard';
 import { useCart } from '../context/CartContext';
@@ -45,6 +45,9 @@ const Home = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
+    // Notification state
+    const [unreadCount, setUnreadCount] = useState(0);
+
     // Filter states
     const [priceRange, setPriceRange] = useState([0, 1000]);
     const [minRating, setMinRating] = useState(0);
@@ -53,11 +56,114 @@ const Home = () => {
 
     const scrollX = useRef(new Animated.Value(0)).current;
     const searchInputRef = useRef(null);
+    const scaleAnim = useRef(new Animated.Value(1)).current;
+
+    // Ref to hold unsubscribe function
+    const unsubscribeRef = useRef(null);
 
     // Fetch data from Firestore
     useEffect(() => {
         fetchData();
     }, []);
+
+    // Setup real-time notification listener with cleanup
+    useEffect(() => {
+        if (user?.uid) {
+            setupNotificationListener();
+        } else {
+            // Clear notifications when user logs out
+            setUnreadCount(0);
+            // Unsubscribe from any existing listeners
+            if (unsubscribeRef.current) {
+                unsubscribeRef.current();
+                unsubscribeRef.current = null;
+            }
+        }
+
+        // Cleanup function - unsubscribe when component unmounts or user changes
+        return () => {
+            if (unsubscribeRef.current) {
+                unsubscribeRef.current();
+                unsubscribeRef.current = null;
+            }
+        };
+    }, [user?.uid]);
+
+    // Setup real-time notification listener
+    const setupNotificationListener = () => {
+        // Clear any existing listener first
+        if (unsubscribeRef.current) {
+            unsubscribeRef.current();
+        }
+
+        const notificationsRef = collection(firestore, 'notifications');
+        const q = query(
+            notificationsRef,
+            where('userId', '==', user.uid),
+            where('read', '==', false)
+        );
+
+        try {
+            const unsubscribe = onSnapshot(q,
+                (snapshot) => {
+                    const newCount = snapshot.size;
+                    if (newCount > unreadCount) {
+                        // Animate when new notifications arrive
+                        animateIcon();
+                    }
+                    setUnreadCount(newCount);
+                },
+                (error) => {
+                    // Handle permission errors gracefully
+                    if (error.code === 'permission-denied') {
+                        console.log('Notification access denied - user may be logged out');
+                        setUnreadCount(0);
+                    } else {
+                        console.error('Error in notification listener:', error);
+                    }
+                }
+            );
+
+            unsubscribeRef.current = unsubscribe;
+        } catch (error) {
+            console.error('Error setting up notification listener:', error);
+        }
+    };
+
+    // Animate notification icon
+    const animateIcon = () => {
+        Animated.sequence([
+            Animated.timing(scaleAnim, {
+                toValue: 1.3,
+                duration: 150,
+                useNativeDriver: true,
+            }),
+            Animated.timing(scaleAnim, {
+                toValue: 1,
+                duration: 150,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    };
+
+    // Handle notification press
+    const handleNotificationPress = () => {
+        if (!user) {
+            Alert.alert(
+                'Sign In Required',
+                'Please sign in to view notifications',
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Sign In',
+                        onPress: () => navigation.navigate('ProfileTab', { screen: 'SignIn' })
+                    }
+                ]
+            );
+            return;
+        }
+        navigation.navigate('Notifications');
+    };
 
     const fetchData = async () => {
         try {
@@ -473,9 +579,30 @@ const Home = () => {
                     </View>
                 </View>
                 <View style={styles.headerRight}>
-                    <TouchableOpacity style={styles.iconButton} activeOpacity={0.7}>
-                        <Ionicons name="notifications-outline" size={22} color="#374151" />
+                    {/* Notification Icon with Badge */}
+                    <TouchableOpacity
+                        style={styles.iconButton}
+                        activeOpacity={0.7}
+                        onPress={handleNotificationPress}
+                    >
+                        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
+                            <Ionicons
+                                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
+                                size={22}
+                                color={unreadCount > 0 ? "#2563EB" : "#374151"}
+                            />
+                        </Animated.View>
+
+                        {/* Badge for unread notifications */}
+                        {unreadCount > 0 && (
+                            <View style={styles.badge}>
+                                <Text style={styles.badgeText}>
+                                    {unreadCount > 9 ? '9+' : unreadCount}
+                                </Text>
+                            </View>
+                        )}
                     </TouchableOpacity>
+
                     <TouchableOpacity
                         style={styles.cartButton}
                         onPress={handleCartPress}
@@ -825,6 +952,31 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
         borderColor: '#F1F5F9',
+    },
+    badge: {
+        position: 'absolute',
+        top: -4,
+        right: -4,
+        backgroundColor: '#EF4444',
+        borderRadius: 10,
+        minWidth: 18,
+        height: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: '#FFFFFF',
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.2,
+        shadowRadius: 3,
+        elevation: 3,
+    },
+    badgeText: {
+        color: 'white',
+        fontSize: 10,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        lineHeight: 12,
     },
     cartButton: {
         padding: 8,
