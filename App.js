@@ -32,6 +32,7 @@ import AddCategory from "./src/screens/admin/AddCategory";
 import Addresses from "./src/screens/Addresses";
 import OrderHistory from "./src/screens/OrderHistory";
 import Notifications from "./src/screens/Notifications";
+import ProfileScreen from "./src/screens/ProfileScreen";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -164,6 +165,11 @@ const ProfileStack = () => {
                 name="SignUp"
                 component={SignUp}
                 options={{ headerShown: false }}
+            />
+            <Stack.Screen
+                name="My Profile"
+                component={ProfileScreen}
+                options={{ title: 'My Profile' }}
             />
             <Stack.Screen
                 name="Addresses"

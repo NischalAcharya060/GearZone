@@ -3,9 +3,10 @@ import {
     createUserWithEmailAndPassword,
     signInWithEmailAndPassword,
     signOut,
-    onAuthStateChanged
+    onAuthStateChanged,
+    updateProfile
 } from 'firebase/auth';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, firestore } from '../firebase/config';
 
 const AuthContext = createContext();
@@ -40,6 +41,8 @@ export const AuthProvider = ({ children }) => {
                         setUser({
                             uid: user.uid,
                             email: user.email,
+                            displayName: user.displayName,
+                            photoURL: user.photoURL,
                             ...userData
                         });
                     } else {
@@ -58,6 +61,8 @@ export const AuthProvider = ({ children }) => {
                         setUser({
                             uid: user.uid,
                             email: user.email,
+                            displayName: user.displayName,
+                            photoURL: user.photoURL,
                             ...defaultUserData
                         });
                         console.log('Default user document created');
@@ -69,6 +74,8 @@ export const AuthProvider = ({ children }) => {
                     setUser({
                         uid: user.uid,
                         email: user.email,
+                        displayName: user.displayName,
+                        photoURL: user.photoURL,
                         role: 'user',
                         fullName: user.email.split('@')[0]
                     });
@@ -109,6 +116,8 @@ export const AuthProvider = ({ children }) => {
             setUser({
                 uid: user.uid,
                 email: user.email,
+                displayName: user.displayName,
+                photoURL: user.photoURL,
                 ...userDocData
             });
 
@@ -175,6 +184,41 @@ export const AuthProvider = ({ children }) => {
         setAuthError(null);
     };
 
+    const updateUserProfile = async (updates) => {
+        try {
+            console.log('Updating user profile with:', updates);
+
+            // Update Firebase Auth profile
+            await updateProfile(auth.currentUser, updates);
+            console.log('Firebase Auth profile updated');
+
+            // Update Firestore user document
+            await updateDoc(doc(firestore, 'users', user.uid), {
+                ...updates,
+                updatedAt: new Date().toISOString(),
+            });
+            console.log('Firestore user document updated');
+
+            // Update local user state
+            setUser(prev => ({
+                ...prev,
+                ...updates
+            }));
+
+            console.log('Local user state updated');
+            return { success: true };
+        } catch (error) {
+            console.error('Error updating profile:', error);
+            let errorMessage = 'Failed to update profile. Please try again.';
+
+            if (error.code === 'auth/requires-recent-login') {
+                errorMessage = 'Please re-authenticate to update your profile.';
+            }
+
+            throw new Error(errorMessage);
+        }
+    };
+
     const value = {
         user,
         signUp,
@@ -182,7 +226,8 @@ export const AuthProvider = ({ children }) => {
         logout,
         loading,
         authError,
-        clearError
+        clearError,
+        updateUserProfile,
     };
 
     return (

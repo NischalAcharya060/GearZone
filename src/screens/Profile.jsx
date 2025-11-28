@@ -136,7 +136,7 @@ const Profile = () => {
             icon: 'person-outline',
             title: 'Personal Information',
             color: '#2563EB',
-            onPress: () => Alert.alert('Coming Soon', 'Personal Information feature coming soon!')
+            onPress: () => navigation.navigate('My Profile')
         },
         {
             icon: 'location-outline',
