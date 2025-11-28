@@ -22,7 +22,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Slider } from '@miblanchard/react-native-slider';
 
-// Firebase imports
 import { firestore } from '../firebase/config';
 import { collection, getDocs, query, orderBy, limit, where, onSnapshot } from 'firebase/firestore';
 
@@ -45,42 +44,33 @@ const Home = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
 
-    // Notification state
     const [unreadCount, setUnreadCount] = useState(0);
 
-    // Filter states
     const [priceRange, setPriceRange] = useState([0, 1000]);
     const [minRating, setMinRating] = useState(0);
     const [inStockOnly, setInStockOnly] = useState(false);
     const [sortBy, setSortBy] = useState('featured');
 
     const scrollX = useRef(new Animated.Value(0)).current;
-    const searchInputRef = useRef(null);
     const scaleAnim = useRef(new Animated.Value(1)).current;
 
-    // Ref to hold unsubscribe function
     const unsubscribeRef = useRef(null);
 
-    // Fetch data from Firestore
     useEffect(() => {
         fetchData();
     }, []);
 
-    // Setup real-time notification listener with cleanup
     useEffect(() => {
         if (user?.uid) {
             setupNotificationListener();
         } else {
-            // Clear notifications when user logs out
             setUnreadCount(0);
-            // Unsubscribe from any existing listeners
             if (unsubscribeRef.current) {
                 unsubscribeRef.current();
                 unsubscribeRef.current = null;
             }
         }
 
-        // Cleanup function - unsubscribe when component unmounts or user changes
         return () => {
             if (unsubscribeRef.current) {
                 unsubscribeRef.current();
@@ -89,77 +79,37 @@ const Home = () => {
         };
     }, [user?.uid]);
 
-    // Setup real-time notification listener
     const setupNotificationListener = () => {
-        // Clear any existing listener first
-        if (unsubscribeRef.current) {
-            unsubscribeRef.current();
-        }
+        if (unsubscribeRef.current) unsubscribeRef.current();
 
-        const notificationsRef = collection(firestore, 'notifications');
         const q = query(
-            notificationsRef,
+            collection(firestore, 'notifications'),
             where('userId', '==', user.uid),
             where('read', '==', false)
         );
 
-        try {
-            const unsubscribe = onSnapshot(q,
-                (snapshot) => {
-                    const newCount = snapshot.size;
-                    if (newCount > unreadCount) {
-                        // Animate when new notifications arrive
-                        animateIcon();
-                    }
-                    setUnreadCount(newCount);
-                },
-                (error) => {
-                    // Handle permission errors gracefully
-                    if (error.code === 'permission-denied') {
-                        console.log('Notification access denied - user may be logged out');
-                        setUnreadCount(0);
-                    } else {
-                        console.error('Error in notification listener:', error);
-                    }
-                }
-            );
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const newCount = snapshot.size;
+            if (newCount > unreadCount) animateIcon();
+            setUnreadCount(newCount);
+        });
 
-            unsubscribeRef.current = unsubscribe;
-        } catch (error) {
-            console.error('Error setting up notification listener:', error);
-        }
+        unsubscribeRef.current = unsubscribe;
     };
 
-    // Animate notification icon
     const animateIcon = () => {
         Animated.sequence([
-            Animated.timing(scaleAnim, {
-                toValue: 1.3,
-                duration: 150,
-                useNativeDriver: true,
-            }),
-            Animated.timing(scaleAnim, {
-                toValue: 1,
-                duration: 150,
-                useNativeDriver: true,
-            }),
+            Animated.timing(scaleAnim, { toValue: 1.3, duration: 150, useNativeDriver: true }),
+            Animated.timing(scaleAnim, { toValue: 1, duration: 150, useNativeDriver: true }),
         ]).start();
     };
 
-    // Handle notification press
     const handleNotificationPress = () => {
         if (!user) {
-            Alert.alert(
-                'Sign In Required',
-                'Please sign in to view notifications',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Sign In',
-                        onPress: () => navigation.navigate('ProfileTab', { screen: 'SignIn' })
-                    }
-                ]
-            );
+            Alert.alert('Sign In Required', 'Please sign in to view notifications', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Sign In', onPress: () => navigation.navigate('ProfileTab', { screen: 'SignIn' }) },
+            ]);
             return;
         }
         navigation.navigate('Notifications');
@@ -169,48 +119,27 @@ const Home = () => {
         try {
             setLoading(true);
 
-            // Fetch products
-            const productsQuery = query(
-                collection(firestore, 'products'),
-                orderBy('createdAt', 'desc'),
-                limit(50)
-            );
-            const productsSnapshot = await getDocs(productsQuery);
-            const productsList = productsSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            const productsSnap = await getDocs(query(collection(firestore, 'products'), orderBy('createdAt', 'desc'), limit(50)));
+            const productsList = productsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             setProducts(productsList);
 
-            // Fetch categories
-            const categoriesQuery = query(
-                collection(firestore, 'categories'),
-                orderBy('createdAt', 'desc')
-            );
-            const categoriesSnapshot = await getDocs(categoriesQuery);
-            const categoriesList = categoriesSnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
+            const catsSnap = await getDocs(query(collection(firestore, 'categories'), orderBy('createdAt', 'desc')));
+            const catsList = catsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setCategories(catsList);
+
+            const featured = productsList.filter(p => p.featured).slice(0, 3);
+            const bannerSource = featured.length > 0 ? featured : productsList.slice(0, 3);
+
+            const bannerData = bannerSource.map((p, i) => ({
+                id: `banner-${i}`,
+                image: p.images?.[0] || 'https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=800',
+                title: p.name,
+                subtitle: `Up to ${Math.floor(Math.random() * 50) + 10}% off`,
+                productId: p.id,
             }));
-            setCategories(categoriesList);
-
-            // Create banners from featured products
-            const featuredProducts = productsList.filter(product => product.featured).slice(0, 3);
-            const featuredBanners = featuredProducts.length > 0 ? featuredProducts : productsList.slice(0, 3);
-
-            const bannerData = featuredBanners.map((product, index) => ({
-                id: `banner-${index}`,
-                image: product.images && product.images.length > 0 ? product.images[0] : 'https://images.unsplash.com/photo-1607082350899-7e105aa886ae?w=800',
-                title: product.name,
-                subtitle: `Up to ${Math.floor(Math.random() * 50) + 10}% off on ${product.category}`,
-                productId: product.id
-            }));
-
             setBanners(bannerData);
-
-        } catch (error) {
-            console.error('Error fetching data:', error);
-            Alert.alert('Error', 'Failed to load data. Please try again.');
+        } catch (e) {
+            Alert.alert('Error', 'Failed to load data');
         } finally {
             setLoading(false);
             setRefreshing(false);
@@ -223,98 +152,50 @@ const Home = () => {
     };
 
     const filteredProducts = useMemo(() => {
-        let filtered = products;
+        let list = products;
 
-        // Category filter
-        if (selectedCategory !== 'All') {
-            filtered = filtered.filter(product => product.category === selectedCategory);
-        }
-
-        // Search filter
+        if (selectedCategory !== 'All') list = list.filter(p => p.category === selectedCategory);
         if (searchQuery) {
-            filtered = filtered.filter(product =>
-                product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (product.brand && product.brand.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                product.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (product.description && product.description.toLowerCase().includes(searchQuery.toLowerCase()))
+            const q = searchQuery.toLowerCase();
+            list = list.filter(p =>
+                p.name?.toLowerCase().includes(q) ||
+                p.brand?.toLowerCase().includes(q) ||
+                p.category?.toLowerCase().includes(q) ||
+                p.description?.toLowerCase().includes(q)
             );
         }
 
-        // Price filter
-        filtered = filtered.filter(product =>
-            product.price >= priceRange[0] && product.price <= priceRange[1]
-        );
+        list = list.filter(p => p.price >= priceRange[0] && p.price <= priceRange[1]);
 
-        // Rating filter
-        if (minRating > 0) {
-            filtered = filtered.filter(product =>
-                product.rating >= minRating
-            );
-        }
+        if (minRating > 0) list = list.filter(p => (p.rating || 0) >= minRating);
+        if (inStockOnly) list = list.filter(p => p.stock > 0);
 
-        // Stock filter
-        if (inStockOnly) {
-            filtered = filtered.filter(product =>
-                product.stock > 0
-            );
-        }
-
-        // Sort products
         switch (sortBy) {
-            case 'price-low':
-                filtered.sort((a, b) => a.price - b.price);
-                break;
-            case 'price-high':
-                filtered.sort((a, b) => b.price - a.price);
-                break;
-            case 'rating':
-                filtered.sort((a, b) => b.rating - a.rating);
-                break;
-            case 'newest':
-                filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                break;
-            case 'featured':
-            default:
-                // Keep original order for featured
-                break;
+            case 'price-low': list.sort((a, b) => a.price - b.price); break;
+            case 'price-high': list.sort((a, b) => b.price - a.price); break;
+            case 'rating': list.sort((a, b) => (b.rating || 0) - (a.rating || 0)); break;
+            case 'newest': list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); break;
         }
 
-        return filtered;
+        return list;
     }, [products, selectedCategory, searchQuery, priceRange, minRating, inStockOnly, sortBy]);
 
     const handleCartPress = () => {
         if (!user) {
-            Alert.alert(
-                'Sign In Required',
-                'Please sign in to view your cart',
-                [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                        text: 'Sign In',
-                        onPress: () => navigation.navigate('ProfileTab', { screen: 'SignIn' })
-                    }
-                ]
-            );
+            Alert.alert('Sign In Required', 'Please sign in to view your cart', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Sign In', onPress: () => navigation.navigate('ProfileTab', { screen: 'SignIn' }) },
+            ]);
             return;
         }
         navigation.navigate('CartTab');
     };
 
-    const handleSearchSubmit = () => {
-        if (searchQuery.trim()) {
-            console.log('Search submitted:', searchQuery);
-        }
-    };
-
     const handleBannerPress = (banner) => {
         if (banner.productId) {
             const product = products.find(p => p.id === banner.productId);
-            if (product) {
-                navigation.navigate('ProductDetail', { product });
-                return;
-            }
+            if (product) navigation.navigate('ProductDetail', { product });
         }
-        setSelectedCategory('All');
     };
 
     const clearAllFilters = () => {
@@ -327,44 +208,31 @@ const Home = () => {
     };
 
     const getActiveFiltersCount = () => {
-        let count = 0;
-        if (selectedCategory !== 'All') count++;
-        if (searchQuery) count++;
-        if (priceRange[0] > 0 || priceRange[1] < 1000) count++;
-        if (minRating > 0) count++;
-        if (inStockOnly) count++;
-        if (sortBy !== 'featured') count++;
-        return count;
+        let c = 0;
+        if (selectedCategory !== 'All') c++;
+        if (searchQuery) c++;
+        if (priceRange[0] > 0 || priceRange[1] < 1000) c++;
+        if (minRating > 0) c++;
+        if (inStockOnly) c++;
+        if (sortBy !== 'featured') c++;
+        return c;
     };
 
     const BannerItem = ({ banner, index }) => {
-        const inputRange = [
-            (index - 1) * screenWidth,
-            index * screenWidth,
-            (index + 1) * screenWidth,
-        ];
-
-        const opacity = scrollX.interpolate({
-            inputRange,
-            outputRange: [0.3, 1, 0.3],
-            extrapolate: 'clamp',
-        });
+        const inputRange = [(index - 1) * screenWidth, index * screenWidth, (index + 1) * screenWidth];
+        const opacity = scrollX.interpolate({ inputRange, outputRange: [0.3, 1, 0.3], extrapolate: 'clamp' });
 
         return (
             <TouchableOpacity onPress={() => handleBannerPress(banner)} activeOpacity={0.9}>
                 <Animated.View style={[styles.banner, { opacity }]}>
-                    <Image
-                        source={{ uri: banner.image }}
-                        style={styles.bannerImage}
-                        resizeMode="cover"
-                    />
+                    <Image source={{ uri: banner.image }} style={styles.bannerImage} resizeMode="cover" />
                     <View style={styles.bannerOverlay}>
                         <View style={styles.bannerContent}>
                             <Text style={styles.bannerTitle}>{banner.title}</Text>
                             <Text style={styles.bannerSubtitle}>{banner.subtitle}</Text>
-                            <TouchableOpacity style={styles.bannerButton} activeOpacity={0.8}>
+                            <TouchableOpacity style={styles.bannerButton}>
                                 <Text style={styles.bannerButtonText}>Shop Now</Text>
-                                <Ionicons name="arrow-forward" size={16} color="#2563EB" style={styles.bannerButtonIcon} />
+                                <Ionicons name="arrow-forward" size={16} color="#2563EB" />
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -375,177 +243,14 @@ const Home = () => {
 
     const CategoryItem = ({ item }) => (
         <TouchableOpacity
-            style={[
-                styles.categoryItem,
-                selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryItemSelected,
-            ]}
+            style={[styles.categoryItem, selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryItemSelected]}
             onPress={() => setSelectedCategory(item.id === 'all' ? 'All' : item.name)}
-            activeOpacity={0.7}
         >
-            <View style={[
-                styles.categoryIcon,
-                selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryIconSelected
-            ]}>
-                <Ionicons
-                    name={item.icon || 'cube-outline'}
-                    size={22}
-                    color={selectedCategory === (item.id === 'all' ? 'All' : item.name) ? '#2563EB' : '#666'}
-                />
+            <View style={[styles.categoryIcon, selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryIconSelected]}>
+                <Ionicons name={item.icon || 'cube-outline'} size={22} color={selectedCategory === (item.id === 'all' ? 'All' : item.name) ? '#2563EB' : '#666'} />
             </View>
-            <Text
-                style={[
-                    styles.categoryText,
-                    selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryTextSelected,
-                ]}
-                numberOfLines={1}
-            >
-                {item.name}
-            </Text>
+            <Text style={[styles.categoryText, selectedCategory === (item.id === 'all' ? 'All' : item.name) && styles.categoryTextSelected]}>{item.name}</Text>
         </TouchableOpacity>
-    );
-
-    const FilterModal = () => (
-        <Modal
-            visible={showFilters}
-            animationType="slide"
-            presentationStyle="pageSheet"
-            onRequestClose={() => setShowFilters(false)}
-        >
-            <SafeAreaView style={styles.modalContainer}>
-                <View style={styles.modalHeader}>
-                    <Text style={styles.modalTitle}>Filters & Sort</Text>
-                    <TouchableOpacity
-                        onPress={() => setShowFilters(false)}
-                        style={styles.closeButton}
-                    >
-                        <Ionicons name="close" size={24} color="#374151" />
-                    </TouchableOpacity>
-                </View>
-
-                <ScrollView
-                    style={styles.modalContent}
-                    showsVerticalScrollIndicator={false}
-                >
-                    {/* Sort Options */}
-                    <View style={styles.filterSection}>
-                        <Text style={styles.filterSectionTitle}>Sort By</Text>
-                        {[
-                            { id: 'featured', label: 'Featured', icon: 'star' },
-                            { id: 'newest', label: 'Newest', icon: 'time' },
-                            { id: 'price-low', label: 'Price: Low to High', icon: 'arrow-up' },
-                            { id: 'price-high', label: 'Price: High to Low', icon: 'arrow-down' },
-                            { id: 'rating', label: 'Highest Rated', icon: 'trending-up' },
-                        ].map((sort) => (
-                            <TouchableOpacity
-                                key={sort.id}
-                                style={[
-                                    styles.sortOption,
-                                    sortBy === sort.id && styles.sortOptionSelected
-                                ]}
-                                onPress={() => setSortBy(sort.id)}
-                                activeOpacity={0.7}
-                            >
-                                <Ionicons
-                                    name={sort.icon}
-                                    size={18}
-                                    color={sortBy === sort.id ? '#2563EB' : '#6B7280'}
-                                />
-                                <Text style={[
-                                    styles.sortOptionText,
-                                    sortBy === sort.id && styles.sortOptionTextSelected
-                                ]}>
-                                    {sort.label}
-                                </Text>
-                                {sortBy === sort.id && (
-                                    <Ionicons name="checkmark" size={18} color="#2563EB" />
-                                )}
-                            </TouchableOpacity>
-                        ))}
-                    </View>
-
-                    {/* Price Range */}
-                    <View style={styles.filterSection}>
-                        <Text style={styles.filterSectionTitle}>
-                            Price Range: ${priceRange[0]} - ${priceRange[1]}
-                        </Text>
-                        <View style={styles.sliderContainer}>
-                            <Slider
-                                value={priceRange}
-                                onValueChange={setPriceRange}
-                                minimumValue={0}
-                                maximumValue={1000}
-                                step={10}
-                                minimumTrackTintColor="#2563EB"
-                                maximumTrackTintColor="#E5E7EB"
-                                thumbTintColor="#2563EB"
-                                thumbStyle={styles.sliderThumb}
-                            />
-                        </View>
-                    </View>
-
-                    {/* Minimum Rating */}
-                    <View style={styles.filterSection}>
-                        <Text style={styles.filterSectionTitle}>Minimum Rating</Text>
-                        <View style={styles.ratingOptions}>
-                            {[4, 3, 2, 1, 0].map(rating => (
-                                <TouchableOpacity
-                                    key={rating}
-                                    style={[
-                                        styles.ratingOption,
-                                        minRating === rating && styles.ratingOptionSelected
-                                    ]}
-                                    onPress={() => setMinRating(rating)}
-                                    activeOpacity={0.7}
-                                >
-                                    <Ionicons
-                                        name="star"
-                                        size={16}
-                                        color={minRating === rating ? "#FFFFFF" : "#F59E0B"}
-                                    />
-                                    <Text style={[
-                                        styles.ratingOptionText,
-                                        minRating === rating && styles.ratingOptionTextSelected
-                                    ]}>
-                                        {rating === 0 ? 'Any' : `${rating}+`}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
-                        </View>
-                    </View>
-
-                    {/* Other Filters */}
-                    <View style={styles.filterSection}>
-                        <Text style={styles.filterSectionTitle}>Other Filters</Text>
-                        <View style={styles.switchOption}>
-                            <Text style={styles.switchLabel}>In Stock Only</Text>
-                            <Switch
-                                value={inStockOnly}
-                                onValueChange={setInStockOnly}
-                                trackColor={{ false: '#E5E7EB', true: '#DBEAFE' }}
-                                thumbColor={inStockOnly ? '#2563EB' : '#9CA3AF'}
-                            />
-                        </View>
-                    </View>
-                </ScrollView>
-
-                <View style={styles.modalFooter}>
-                    <TouchableOpacity
-                        style={styles.clearButton}
-                        onPress={clearAllFilters}
-                        activeOpacity={0.7}
-                    >
-                        <Text style={styles.clearButtonText}>Clear All</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.applyButton}
-                        onPress={() => setShowFilters(false)}
-                        activeOpacity={0.8}
-                    >
-                        <Text style={styles.applyButtonText}>Apply Filters</Text>
-                    </TouchableOpacity>
-                </View>
-            </SafeAreaView>
-        </Modal>
     );
 
     const onBannerScroll = Animated.event(
@@ -555,7 +260,7 @@ const Home = () => {
 
     if (loading && !refreshing) {
         return (
-            <SafeAreaView style={styles.container} edges={['top']}>
+            <SafeAreaView style={styles.container}>
                 <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#2563EB" />
@@ -566,55 +271,126 @@ const Home = () => {
     }
 
     return (
-        <SafeAreaView style={styles.container} edges={['top']}>
+        <SafeAreaView style={styles.container}>
             <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-            <FilterModal />
 
-            {/* Header */}
+            <Modal
+                visible={showFilters}
+                animationType="slide"
+                transparent={false}
+                presentationStyle="pageSheet"
+                onRequestClose={() => setShowFilters(false)}
+            >
+                <SafeAreaView style={styles.modalContainer}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Filters & Sort</Text>
+                        <TouchableOpacity onPress={() => setShowFilters(false)}>
+                            <Ionicons name="close" size={24} color="#374151" />
+                        </TouchableOpacity>
+                    </View>
+
+                    <ScrollView style={styles.modalContent}>
+                        <View style={styles.filterSection}>
+                            <Text style={styles.filterSectionTitle}>Sort By</Text>
+                            {[
+                                { id: 'featured', label: 'Featured', icon: 'star' },
+                                { id: 'newest', label: 'Newest', icon: 'time' },
+                                { id: 'price-low', label: 'Price: Low to High', icon: 'arrow-up' },
+                                { id: 'price-high', label: 'Price: High to Low', icon: 'arrow-down' },
+                                { id: 'rating', label: 'Highest Rated', icon: 'trending-up' },
+                            ].map(item => (
+                                <TouchableOpacity
+                                    key={item.id}
+                                    style={[styles.sortOption, sortBy === item.id && styles.sortOptionSelected]}
+                                    onPress={() => setSortBy(item.id)}
+                                >
+                                    <Ionicons name={item.icon} size={18} color={sortBy === item.id ? '#2563EB' : '#6B7280'} />
+                                    <Text style={[styles.sortOptionText, sortBy === item.id && styles.sortOptionTextSelected]}>{item.label}</Text>
+                                    {sortBy === item.id && <Ionicons name="checkmark" size={18} color="#2563EB" />}
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        <View style={styles.filterSection}>
+                            <Text style={styles.filterSectionTitle}>Price Range: ${priceRange[0]} - ${priceRange[1]}</Text>
+                            <View style={styles.sliderContainer}>
+                                <Slider
+                                    value={priceRange}
+                                    onValueChange={setPriceRange}
+                                    minimumValue={0}
+                                    maximumValue={1000}
+                                    step={10}
+                                    minimumTrackTintColor="#2563EB"
+                                    maximumTrackTintColor="#E5E7EB"
+                                    thumbTintColor="#2563EB"
+                                    thumbStyle={styles.sliderThumb}
+                                />
+                            </View>
+                        </View>
+
+                        <View style={styles.filterSection}>
+                            <Text style={styles.filterSectionTitle}>Minimum Rating</Text>
+                            <View style={styles.ratingOptions}>
+                                {[4,3,2,1,0].map(r => (
+                                    <TouchableOpacity
+                                        key={r}
+                                        style={[styles.ratingOption, minRating === r && styles.ratingOptionSelected]}
+                                        onPress={() => setMinRating(r)}
+                                    >
+                                        <Ionicons name="star" size={16} color={minRating === r ? "#FFFFFF" : "#F59E0B"} />
+                                        <Text style={[styles.ratingOptionText, minRating === r && styles.ratingOptionTextSelected]}>
+                                            {r === 0 ? 'Any' : `${r}+`}
+                                        </Text>
+                                    </TouchableOpacity>
+                                ))}
+                            </View>
+                        </View>
+
+                        <View style={styles.filterSection}>
+                            <Text style={styles.filterSectionTitle}>Other Filters</Text>
+                            <View style={styles.switchOption}>
+                                <Text style={styles.switchLabel}>In Stock Only</Text>
+                                <Switch value={inStockOnly} onValueChange={setInStockOnly} />
+                            </View>
+                        </View>
+                    </ScrollView>
+
+                    <View style={styles.modalFooter}>
+                        <TouchableOpacity style={styles.clearButton} onPress={clearAllFilters}>
+                            <Text style={styles.clearButtonText}>Clear All</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={styles.applyButton} onPress={() => setShowFilters(false)}>
+                            <Text style={styles.applyButtonText}>Apply Filters</Text>
+                        </TouchableOpacity>
+                    </View>
+                </SafeAreaView>
+            </Modal>
+
             <View style={styles.header}>
                 <View style={styles.headerLeft}>
                     <View style={styles.logoContainer}>
                         <Ionicons name="sparkles" size={24} color="#2563EB" />
-                        <Text style={styles.logoText}>TechStore</Text>
+                        <Text style={styles.logoText}>GearZone</Text>
                     </View>
                 </View>
                 <View style={styles.headerRight}>
-                    {/* Notification Icon with Badge */}
-                    <TouchableOpacity
-                        style={styles.iconButton}
-                        activeOpacity={0.7}
-                        onPress={handleNotificationPress}
-                    >
+                    <TouchableOpacity style={styles.iconButton} onPress={handleNotificationPress}>
                         <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-                            <Ionicons
-                                name={unreadCount > 0 ? "notifications" : "notifications-outline"}
-                                size={22}
-                                color={unreadCount > 0 ? "#2563EB" : "#374151"}
-                            />
+                            <Ionicons name={unreadCount > 0 ? "notifications" : "notifications-outline"} size={22} color={unreadCount > 0 ? "#2563EB" : "#374151"} />
                         </Animated.View>
-
-                        {/* Badge for unread notifications */}
                         {unreadCount > 0 && (
                             <View style={styles.badge}>
-                                <Text style={styles.badgeText}>
-                                    {unreadCount > 9 ? '9+' : unreadCount}
-                                </Text>
+                                <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
                             </View>
                         )}
                     </TouchableOpacity>
 
-                    <TouchableOpacity
-                        style={styles.cartButton}
-                        onPress={handleCartPress}
-                        activeOpacity={0.7}
-                    >
+                    <TouchableOpacity style={styles.cartButton} onPress={handleCartPress}>
                         <View style={styles.cartIcon}>
                             <Ionicons name="cart-outline" size={22} color="#374151" />
                             {user && getCartItemsCount() > 0 && (
                                 <View style={styles.cartBadge}>
-                                    <Text style={styles.cartBadgeText}>
-                                        {getCartItemsCount() > 99 ? '99+' : getCartItemsCount()}
-                                    </Text>
+                                    <Text style={styles.cartBadgeText}>{getCartItemsCount() > 99 ? '99+' : getCartItemsCount()}</Text>
                                 </View>
                             )}
                         </View>
@@ -623,47 +399,26 @@ const Home = () => {
             </View>
 
             <ScrollView
-                style={styles.scrollView}
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={styles.scrollContent}
-                refreshControl={
-                    <RefreshControl
-                        refreshing={refreshing}
-                        onRefresh={onRefresh}
-                        colors={['#2563EB']}
-                        tintColor="#2563EB"
-                    />
-                }
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#2563EB']} />}
             >
-                {/* Search Bar */}
                 <View style={styles.searchSection}>
                     <View style={styles.searchContainer}>
-                        <Ionicons name="search-outline" size={20} color="#666" style={styles.searchIcon} />
+                        <Ionicons name="search-outline" size={20} color="#666" />
                         <TextInput
-                            ref={searchInputRef}
                             style={styles.searchInput}
                             placeholder="Search products, brands, and more..."
                             placeholderTextColor="#64748B"
                             value={searchQuery}
                             onChangeText={setSearchQuery}
-                            onSubmitEditing={handleSearchSubmit}
-                            returnKeyType="search"
                         />
                         {searchQuery ? (
-                            <TouchableOpacity
-                                style={styles.clearSearchButton}
-                                onPress={() => setSearchQuery('')}
-                                activeOpacity={0.7}
-                            >
+                            <TouchableOpacity onPress={() => setSearchQuery('')}>
                                 <Ionicons name="close-circle" size={20} color="#94A3B8" />
                             </TouchableOpacity>
                         ) : null}
                     </View>
-                    <TouchableOpacity
-                        style={styles.filterButton}
-                        onPress={() => setShowFilters(true)}
-                        activeOpacity={0.7}
-                    >
+                    <TouchableOpacity style={styles.filterButton} onPress={() => setShowFilters(true)}>
                         <Ionicons name="options-outline" size={22} color="#374151" />
                         {getActiveFiltersCount() > 0 && (
                             <View style={styles.filterBadge}>
@@ -673,158 +428,30 @@ const Home = () => {
                     </TouchableOpacity>
                 </View>
 
-                {/* Active Filters Bar */}
-                {getActiveFiltersCount() > 0 && (
-                    <View style={styles.activeFilters}>
-                        <ScrollView
-                            horizontal
-                            showsHorizontalScrollIndicator={false}
-                            contentContainerStyle={styles.activeFiltersContent}
-                        >
-                            {selectedCategory !== 'All' && (
-                                <View style={styles.activeFilterTag}>
-                                    <Text style={styles.activeFilterText}>Category: {selectedCategory}</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setSelectedCategory('All')}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Ionicons name="close" size={14} color="#374151" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                            {searchQuery && (
-                                <View style={styles.activeFilterTag}>
-                                    <Text style={styles.activeFilterText}>Search: "{searchQuery}"</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setSearchQuery('')}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Ionicons name="close" size={14} color="#374151" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                            {(priceRange[0] > 0 || priceRange[1] < 1000) && (
-                                <View style={styles.activeFilterTag}>
-                                    <Text style={styles.activeFilterText}>
-                                        Price: ${priceRange[0]} - ${priceRange[1]}
-                                    </Text>
-                                    <TouchableOpacity
-                                        onPress={() => setPriceRange([0, 1000])}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Ionicons name="close" size={14} color="#374151" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                            {minRating > 0 && (
-                                <View style={styles.activeFilterTag}>
-                                    <Text style={styles.activeFilterText}>Rating: {minRating}+ stars</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setMinRating(0)}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Ionicons name="close" size={14} color="#374151" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                            {inStockOnly && (
-                                <View style={styles.activeFilterTag}>
-                                    <Text style={styles.activeFilterText}>In Stock</Text>
-                                    <TouchableOpacity
-                                        onPress={() => setInStockOnly(false)}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Ionicons name="close" size={14} color="#374151" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                            {sortBy !== 'featured' && (
-                                <View style={styles.activeFilterTag}>
-                                    <Text style={styles.activeFilterText}>
-                                        Sort: {sortBy.replace('-', ' ')}
-                                    </Text>
-                                    <TouchableOpacity
-                                        onPress={() => setSortBy('featured')}
-                                        activeOpacity={0.7}
-                                    >
-                                        <Ionicons name="close" size={14} color="#374151" />
-                                    </TouchableOpacity>
-                                </View>
-                            )}
-                        </ScrollView>
-                    </View>
-                )}
-
-                {/* Banners Section */}
                 {banners.length > 0 && (
                     <View style={styles.bannerSection}>
-                        <View style={styles.sectionHeader}>
-                            <Text style={styles.sectionTitle}>Special Offers</Text>
-                            <TouchableOpacity style={styles.seeAllButton} activeOpacity={0.7}>
-                                <Text style={styles.seeAllText}>View All</Text>
-                                <Ionicons name="chevron-forward" size={16} color="#2563EB" />
-                            </TouchableOpacity>
-                        </View>
-                        <View style={styles.bannerWrapper}>
-                            <Animated.FlatList
-                                data={banners}
-                                horizontal
-                                pagingEnabled
-                                showsHorizontalScrollIndicator={false}
-                                keyExtractor={(item) => item.id}
-                                renderItem={({ item, index }) => <BannerItem banner={item} index={index} />}
-                                contentContainerStyle={styles.bannerContent}
-                                onScroll={onBannerScroll}
-                                scrollEventThrottle={16}
-                                bounces={false}
-                            />
-                            <View style={styles.bannerIndicators}>
-                                {banners.map((_, index) => {
-                                    const inputRange = [
-                                        (index - 1) * screenWidth,
-                                        index * screenWidth,
-                                        (index + 1) * screenWidth,
-                                    ];
-
-                                    const dotWidth = scrollX.interpolate({
-                                        inputRange,
-                                        outputRange: [8, 20, 8],
-                                        extrapolate: 'clamp',
-                                    });
-
-                                    const opacity = scrollX.interpolate({
-                                        inputRange,
-                                        outputRange: [0.3, 1, 0.3],
-                                        extrapolate: 'clamp',
-                                    });
-
-                                    return (
-                                        <Animated.View
-                                            key={index}
-                                            style={[
-                                                styles.bannerDot,
-                                                {
-                                                    width: dotWidth,
-                                                    opacity: opacity,
-                                                },
-                                            ]}
-                                        />
-                                    );
-                                })}
-                            </View>
+                        <Animated.FlatList
+                            data={banners}
+                            horizontal
+                            pagingEnabled
+                            showsHorizontalScrollIndicator={false}
+                            keyExtractor={item => item.id}
+                            renderItem={({ item, index }) => <BannerItem banner={item} index={index} />}
+                            onScroll={onBannerScroll}
+                            scrollEventThrottle={16}
+                        />
+                        <View style={styles.bannerIndicators}>
+                            {banners.map((_, i) => {
+                                const inputRange = [(i - 1) * screenWidth, i * screenWidth, (i + 1) * screenWidth];
+                                const dotWidth = scrollX.interpolate({ inputRange, outputRange: [8, 20, 8], extrapolate: 'clamp' });
+                                const opacity = scrollX.interpolate({ inputRange, outputRange: [0.3, 1, 0.3], extrapolate: 'clamp' });
+                                return <Animated.View key={i} style={[styles.bannerDot, { width: dotWidth, opacity }]} />;
+                            })}
                         </View>
                     </View>
                 )}
 
-                {/* Categories Section */}
                 <View style={styles.categoriesSection}>
-                    <View style={styles.sectionHeader}>
-                        <Text style={styles.sectionTitle}>Categories</Text>
-                        <TouchableOpacity style={styles.seeAllButton} activeOpacity={0.7}>
-                            <Text style={styles.seeAllText}>All</Text>
-                            <Ionicons name="chevron-forward" size={16} color="#2563EB" />
-                        </TouchableOpacity>
-                    </View>
                     <FlatList
                         data={[{ id: 'all', name: 'All', icon: 'apps' }, ...categories]}
                         horizontal
@@ -836,7 +463,6 @@ const Home = () => {
                     />
                 </View>
 
-                {/* Products Section */}
                 <View style={styles.productsSection}>
                     <View style={styles.sectionHeader}>
                         <View>
@@ -887,7 +513,6 @@ const Home = () => {
                     )}
                 </View>
 
-                {/* Bottom Spacer */}
                 <View style={styles.bottomSpacer} />
             </ScrollView>
         </SafeAreaView>
