@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -9,6 +9,7 @@ import {
     Dimensions,
     FlatList,
     Alert,
+    ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -16,6 +17,8 @@ import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useCompare } from '../context/CompareContext';
 import { useAuth } from '../context/AuthContext';
+import { firestore } from '../firebase/config';
+import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
 
 const { width: screenWidth } = Dimensions.get('window');
 
@@ -23,6 +26,8 @@ const ProductDetail = ({ route, navigation }) => {
     const { product } = route.params;
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
     const [quantity, setQuantity] = useState(1);
+    const [reviews, setReviews] = useState([]);
+    const [reviewsLoading, setReviewsLoading] = useState(false);
 
     const { addToCart } = useCart();
     const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlist();
@@ -31,14 +36,62 @@ const ProductDetail = ({ route, navigation }) => {
 
     const isWishlisted = isInWishlist(product.id);
 
-    // --- MODIFIED IMAGE LOGIC ---
-    // Use product.images array if available, or fall back to product.image in an array.
     const productImages = product.images && Array.isArray(product.images) && product.images.length > 0
         ? product.images
         : [product.image];
 
-    // Fallback URL if no image is present (same as in ProductCard for consistency)
     const fallbackImage = 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&h=500&fit=crop';
+
+    useEffect(() => {
+        fetchReviews();
+    }, [product.id]);
+
+    const fetchReviews = async () => {
+        if (!product.id) return;
+
+        setReviewsLoading(true);
+        try {
+            const reviewsRef = collection(firestore, 'reviews');
+            const q = query(
+                reviewsRef,
+                where('productId', '==', product.id),
+                orderBy('createdAt', 'desc')
+            );
+            const querySnapshot = await getDocs(q);
+
+            const reviewPromises = querySnapshot.docs.map(async (docSnap) => {
+                const reviewData = docSnap.data();
+
+                // Fetch User Profile (including photoURL) from 'users' collection
+                let photoURL = null;
+                if (reviewData.userId) {
+                    const userRef = doc(firestore, 'users', reviewData.userId);
+                    const userSnap = await getDoc(userRef);
+                    if (userSnap.exists()) {
+                        photoURL = userSnap.data().photoURL || null;
+                    }
+                }
+
+                return {
+                    id: docSnap.id,
+                    ...reviewData,
+                    photoURL: photoURL,
+                    createdAt: reviewData.createdAt?.toDate().toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                    }) || 'N/A'
+                };
+            });
+
+            const fetchedReviews = await Promise.all(reviewPromises);
+            setReviews(fetchedReviews);
+        } catch (error) {
+            console.error('Error fetching reviews:', error);
+        } finally {
+            setReviewsLoading(false);
+        }
+    };
 
     const showLoginAlert = (action) => {
         Alert.alert(
@@ -111,7 +164,6 @@ const ProductDetail = ({ route, navigation }) => {
             return;
         }
 
-        // 1. Prepare the single item for direct checkout
         const directItem = {
             ...product,
             quantity: quantity,
@@ -119,8 +171,6 @@ const ProductDetail = ({ route, navigation }) => {
 
         Alert.alert('Success', `Proceeding to Checkout with ${quantity} x ${product.name}.`);
 
-        // 2. Navigate directly to the 'Checkout' screen in the 'CartTab' stack,
-        //    passing the direct purchase item.
         navigation.navigate('CartTab', {
             screen: 'Checkout',
             params: {
@@ -161,6 +211,34 @@ const ProductDetail = ({ route, navigation }) => {
         })),
     ];
 
+    const ReviewCard = ({ review }) => (
+        <View style={styles.reviewCard}>
+            <View style={styles.reviewHeader}>
+                <Image
+                    source={{ uri: review.photoURL || 'https://via.placeholder.com/150/9CA3AF/FFFFFF?text=A' }}
+                    style={styles.avatar}
+                />
+                <View style={styles.reviewUserContainer}>
+                    <Text style={styles.reviewUser}>{review.userName || 'Anonymous User'}</Text>
+                    <View style={styles.reviewRating}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                            <Ionicons
+                                key={star}
+                                name="star"
+                                size={14}
+                                color={star <= review.rating ? "#FFD700" : "#E5E7EB"}
+                            />
+                        ))}
+                    </View>
+                </View>
+                <Text style={styles.reviewDate}>{review.createdAt}</Text>
+            </View>
+            {review.comment && (
+                <Text style={styles.reviewComment}>{review.comment}</Text>
+            )}
+        </View>
+    );
+
     return (
         <SafeAreaView style={styles.container} edges={['bottom']}>
             <View style={styles.header}>
@@ -185,13 +263,11 @@ const ProductDetail = ({ route, navigation }) => {
 
             <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.imageSection}>
-                    {/* Main Image Display */}
                     <Image
                         source={{ uri: productImages[selectedImageIndex] || fallbackImage }}
                         style={styles.mainImage}
                     />
 
-                    {/* Image Indicators */}
                     {productImages.length > 1 && (
                         <View style={styles.imageIndicators}>
                             {productImages.map((_, index) => (
@@ -206,7 +282,6 @@ const ProductDetail = ({ route, navigation }) => {
                         </View>
                     )}
 
-                    {/* Thumbnails */}
                     {productImages.length > 1 && (
                         <FlatList
                             data={productImages}
@@ -316,6 +391,29 @@ const ProductDetail = ({ route, navigation }) => {
                         ))}
                     </View>
                 )}
+
+                <View style={styles.reviewsSection}>
+                    <Text style={styles.sectionTitle}>Customer Reviews ({reviews.length})</Text>
+
+                    {reviewsLoading ? (
+                        <ActivityIndicator size="small" color="#2563EB" style={styles.reviewsLoadingIndicator} />
+                    ) : reviews.length > 0 ? (
+                        <FlatList
+                            data={reviews}
+                            scrollEnabled={false}
+                            keyExtractor={(item) => item.id}
+                            renderItem={({ item }) => <ReviewCard review={item} />}
+                            ItemSeparatorComponent={() => <View style={styles.reviewSeparator} />}
+                        />
+                    ) : (
+                        <View style={styles.noReviews}>
+                            <Ionicons name="chatbox-outline" size={32} color="#D1D5DB" />
+                            <Text style={styles.noReviewsText}>
+                                Be the first to review this product!
+                            </Text>
+                        </View>
+                    )}
+                </View>
 
                 <View style={styles.spacer} />
             </ScrollView>
@@ -628,6 +726,73 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#333',
         marginLeft: 12,
+    },
+    reviewsSection: {
+        backgroundColor: 'white',
+        padding: 16,
+        marginTop: 8,
+    },
+    reviewsLoadingIndicator: {
+        paddingVertical: 20,
+    },
+    reviewCard: {
+        paddingVertical: 15,
+    },
+    reviewHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        marginBottom: 8,
+    },
+    avatar: {
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        marginRight: 10,
+        backgroundColor: '#E5E7EB',
+        borderWidth: 1,
+        borderColor: '#D1D5DB',
+    },
+    reviewUserContainer: {
+        flex: 1,
+    },
+    reviewUser: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#1F2937',
+        marginBottom: 2,
+    },
+    reviewDate: {
+        fontSize: 12,
+        color: '#9CA3AF',
+        alignSelf: 'flex-start',
+    },
+    reviewRating: {
+        flexDirection: 'row',
+    },
+    reviewComment: {
+        fontSize: 15,
+        color: '#374151',
+        lineHeight: 22,
+        marginTop: 5,
+        paddingLeft: 50,
+    },
+    reviewSeparator: {
+        height: 1,
+        backgroundColor: '#F3F4F6',
+    },
+    noReviews: {
+        alignItems: 'center',
+        paddingVertical: 30,
+        backgroundColor: '#F9FAFB',
+        borderRadius: 8,
+        marginTop: 10,
+    },
+    noReviewsText: {
+        fontSize: 16,
+        color: '#6B7280',
+        marginTop: 10,
+        fontWeight: '500',
     },
     spacer: {
         height: 100,

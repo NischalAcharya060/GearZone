@@ -16,7 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
-import { useCart } from '../context/CartContext'; // Import CartContext
+import { useCart } from '../context/CartContext';
 import { firestore } from '../firebase/config';
 import { collection, query, where, getDocs, orderBy, doc, getDoc } from 'firebase/firestore';
 
@@ -25,36 +25,58 @@ const { width } = Dimensions.get('window');
 const OrderHistory = () => {
     const navigation = useNavigation();
     const { user } = useAuth();
-    const { addToCart } = useCart(); // Get addToCart function from CartContext
+    const { addToCart } = useCart();
 
-    // Use a ref to track if the component is mounted for cleanup
     const isMounted = useRef(true);
 
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [selectedOrder, setSelectedOrder] = useState(null);
-    const [addingToCart, setAddingToCart] = useState(false); // Track loading state for reorder
-
+    const [addingToCart, setAddingToCart] = useState(false);
     const [isFilterVisible, setIsFilterVisible] = useState(false);
     const [filterStatus, setFilterStatus] = useState('All');
+    const [userReviews, setUserReviews] = useState({});
 
     useEffect(() => {
-        // Set up the cleanup function
         isMounted.current = true;
 
         if (user?.uid) {
             fetchOrders();
+            fetchUserReviews();
         }
 
         return () => {
-            // This runs when the component is unmounted (page is destroyed)
             isMounted.current = false;
         };
     }, [user?.uid, filterStatus]);
 
+    const fetchUserReviews = async () => {
+        if (!user?.uid) return;
+
+        try {
+            const reviewsRef = collection(firestore, 'reviews');
+            const q = query(reviewsRef, where('userId', '==', user.uid));
+            const querySnapshot = await getDocs(q);
+
+            const reviewsMap = {};
+            querySnapshot.forEach((docSnap) => {
+                const reviewData = docSnap.data();
+                reviewsMap[reviewData.productId] = {
+                    id: docSnap.id,
+                    ...reviewData
+                };
+            });
+
+            if (isMounted.current) {
+                setUserReviews(reviewsMap);
+            }
+        } catch (error) {
+            console.error('Error fetching user reviews:', error);
+        }
+    };
+
     const fetchOrders = async () => {
-        // Safe to call setLoading(true) since this is synchronous at the start
         setLoading(true);
 
         try {
@@ -95,7 +117,7 @@ const OrderHistory = () => {
                                     productName: productData.name,
                                     productImage: productData.images?.[0] || null,
                                     productPrice: productData.price,
-                                    productData: productData, // Store full product data for cart
+                                    productData: productData,
                                 };
                             }
                             return item;
@@ -113,16 +135,13 @@ const OrderHistory = () => {
                 });
             }
 
-            // Only update state if the component is still mounted
             if (isMounted.current) {
                 setOrders(ordersData);
             }
         } catch (error) {
             console.error('Error fetching orders:', error);
-            // Alert is usually safe, but check for state updates
             Alert.alert('Error', 'Failed to load orders. Please try again.');
         } finally {
-            // Only update state if the component is still mounted
             if (isMounted.current) {
                 setLoading(false);
                 setRefreshing(false);
@@ -133,6 +152,7 @@ const OrderHistory = () => {
     const onRefresh = () => {
         setRefreshing(true);
         fetchOrders();
+        fetchUserReviews();
     };
 
     const formatDate = (dateString) => {
@@ -192,10 +212,8 @@ const OrderHistory = () => {
             let addedItemsCount = 0;
             let failedItemsCount = 0;
 
-            // Add each item from the order to the cart
             for (const item of order.items) {
                 try {
-                    // Create a product object for the cart
                     const productForCart = {
                         id: item.productId,
                         name: item.productName || item.name,
@@ -204,11 +222,9 @@ const OrderHistory = () => {
                         images: item.productImage ? [item.productImage] : [],
                         brand: item.brand || 'Unknown Brand',
                         category: item.category || 'General',
-                        // Include any other product data that might be needed
                         ...item.productData
                     };
 
-                    // Add the item to cart with the specified quantity
                     for (let i = 0; i < item.quantity; i++) {
                         addToCart(productForCart);
                     }
@@ -220,7 +236,6 @@ const OrderHistory = () => {
                 }
             }
 
-            // Show success message
             if (failedItemsCount === 0) {
                 Alert.alert(
                     'Success!',
@@ -259,6 +274,23 @@ const OrderHistory = () => {
             Alert.alert('Error', 'Failed to add items to cart. Please try again.');
         } finally {
             setAddingToCart(false);
+        }
+    };
+
+    const handleReview = (order) => {
+        if (order.items && order.items.length > 0) {
+            const firstItem = order.items[0];
+            const hasReview = userReviews[firstItem.productId];
+
+            navigation.navigate('ReviewScreen', {
+                orderId: order.id,
+                productId: firstItem.productId,
+                productName: firstItem.productName || firstItem.name,
+                isEditing: !!hasReview,
+                existingReview: hasReview
+            });
+        } else {
+            Alert.alert('No Items', 'This order has no items to review.');
         }
     };
 
@@ -302,144 +334,190 @@ const OrderHistory = () => {
         );
     };
 
-    const OrderCard = ({ order }) => (
-        <TouchableOpacity
-            style={styles.orderCard}
-            onPress={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
-            activeOpacity={0.8}
-        >
-            <View style={styles.orderHeader}>
-                <View style={styles.orderInfo}>
-                    <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
-                    <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
+    const OrderCard = ({ order }) => {
+        const isDelivered = order.status?.toLowerCase() === 'delivered';
+        const firstItem = order.items?.[0];
+        const hasReviewForFirstItem = firstItem ? userReviews[firstItem.productId] : false;
+
+        return (
+            <TouchableOpacity
+                style={styles.orderCard}
+                onPress={() => setSelectedOrder(selectedOrder?.id === order.id ? null : order)}
+                activeOpacity={0.8}
+            >
+                <View style={styles.orderHeader}>
+                    <View style={styles.orderInfo}>
+                        <Text style={styles.orderNumber}>Order #{order.orderNumber}</Text>
+                        <Text style={styles.orderDate}>{formatDate(order.createdAt)}</Text>
+                    </View>
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '1A' }]}>
+                        <Ionicons
+                            name={getStatusIcon(order.status)}
+                            size={16}
+                            color={getStatusColor(order.status)}
+                        />
+                        <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
+                            {order.status || 'Processing'}
+                        </Text>
+                    </View>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusColor(order.status) + '1A' }]}>
-                    <Ionicons
-                        name={getStatusIcon(order.status)}
-                        size={16}
-                        color={getStatusColor(order.status)}
-                    />
-                    <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-                        {order.status || 'Processing'}
+
+                <View style={styles.orderSummary}>
+                    <Text style={styles.itemsCount}>
+                        {order.items?.length} item{order.items?.length !== 1 ? 's' : ''} • {order.items?.[0]?.productName} {order.items.length > 1 ? 'and more' : ''}
                     </Text>
+                    <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
                 </View>
-            </View>
 
-            <View style={styles.orderSummary}>
-                <Text style={styles.itemsCount}>
-                    {order.items?.length} item{order.items?.length !== 1 ? 's' : ''} • {order.items?.[0]?.productName} {order.items.length > 1 ? 'and more' : ''}
-                </Text>
-                <Text style={styles.orderTotal}>{formatCurrency(order.total)}</Text>
-            </View>
+                {selectedOrder?.id === order.id && (
+                    <View style={styles.orderDetails}>
+                        <View style={styles.divider} />
 
-            {selectedOrder?.id === order.id && (
-                <View style={styles.orderDetails}>
-                    <View style={styles.divider} />
+                        <Text style={styles.detailsTitle}>Items Ordered</Text>
 
-                    <Text style={styles.detailsTitle}>Items Ordered</Text>
-
-                    {order.items?.map((item, index) => (
-                        <View key={index} style={styles.orderItem}>
-                            <ProductImage uri={item.productImage} />
-                            <View style={styles.itemDetails}>
-                                <Text style={styles.itemName} numberOfLines={2}>{item.productName || item.name}</Text>
-                                <Text style={styles.itemPrice}>
-                                    Qty: {item.quantity} | {formatCurrency(item.productPrice || item.price)}
-                                </Text>
-                            </View>
-                            <Text style={styles.itemTotal}>
-                                {formatCurrency((item.productPrice || item.price) * item.quantity)}
-                            </Text>
-                        </View>
-                    ))}
-
-                    <View style={styles.sectionContainer}>
-                        <Text style={styles.sectionLabel}>Shipping Information</Text>
-                        {order.shippingInfo ? (
-                            <View style={styles.sectionContent}>
-                                <Text style={styles.shippingName}>{order.shippingInfo.fullName}</Text>
-                                <Text style={styles.detailText}>{order.shippingInfo.address}, {order.shippingInfo.city}</Text>
-                                <Text style={styles.detailText}>
-                                    {order.shippingInfo.state} {order.shippingInfo.zipCode}, {order.shippingInfo.country}
-                                </Text>
-                                <Text style={styles.detailText}><Ionicons name="call-outline" size={12} color="#6B7280" /> {order.shippingInfo.phone}</Text>
-                            </View>
-                        ) : (
-                            <Text style={styles.noDetailText}>No shipping info available.</Text>
-                        )}
-                    </View>
-
-                    <View style={styles.sectionContainer}>
-                        <Text style={styles.sectionLabel}>Payment</Text>
-                        <View style={styles.sectionContent}>
-                            <View style={styles.paymentRow}>
-                                <Text style={styles.detailText}>Method:</Text>
-                                <Text style={styles.paymentText}>{order.paymentMethod || 'Credit Card'}</Text>
-                            </View>
-                            <View style={styles.paymentRow}>
-                                <Text style={styles.detailText}>Status:</Text>
-                                <View style={[styles.paidBadge]}>
-                                    <Ionicons name="checkmark-circle" size={14} color="#10B981" />
-                                    <Text style={[styles.statusText, { color: '#10B981' }]}>Paid</Text>
+                        {order.items?.map((item, index) => {
+                            const hasReview = userReviews[item.productId];
+                            return (
+                                <View key={index} style={styles.orderItem}>
+                                    <ProductImage uri={item.productImage} />
+                                    <View style={styles.itemDetails}>
+                                        <Text style={styles.itemName} numberOfLines={2}>{item.productName || item.name}</Text>
+                                        <Text style={styles.itemPrice}>
+                                            Qty: {item.quantity} | {formatCurrency(item.productPrice || item.price)}
+                                        </Text>
+                                        {isDelivered && (
+                                            <TouchableOpacity
+                                                style={styles.reviewStatusContainer}
+                                                onPress={() => navigation.navigate('ReviewScreen', {
+                                                    orderId: order.id,
+                                                    productId: item.productId,
+                                                    productName: item.productName || item.name,
+                                                    isEditing: !!hasReview,
+                                                    existingReview: hasReview
+                                                })}
+                                            >
+                                                <Ionicons
+                                                    name={hasReview ? "star" : "star-outline"}
+                                                    size={14}
+                                                    color={hasReview ? "#F59E0B" : "#6B7280"}
+                                                />
+                                                <Text style={[styles.reviewStatusText, hasReview && styles.reviewedText]}>
+                                                    {hasReview ? 'Reviewed' : 'Write Review'}
+                                                </Text>
+                                            </TouchableOpacity>
+                                        )}
+                                    </View>
+                                    <Text style={styles.itemTotal}>
+                                        {formatCurrency((item.productPrice || item.price) * item.quantity)}
+                                    </Text>
                                 </View>
-                            </View>
-                        </View>
-                    </View>
+                            );
+                        })}
 
-                    <View style={styles.sectionContainer}>
-                        <Text style={styles.sectionLabel}>Summary</Text>
-                        <View style={styles.sectionContent}>
-                            <View style={styles.summaryRow}>
-                                <Text style={styles.summaryLabel}>Subtotal</Text>
-                                <Text style={styles.summaryValue}>{formatCurrency(order.subtotal || order.total)}</Text>
-                            </View>
-                            {order.shippingCost > 0 && (
-                                <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Shipping</Text>
-                                    <Text style={styles.summaryValue}>{formatCurrency(order.shippingCost)}</Text>
+                        <View style={styles.sectionContainer}>
+                            <Text style={styles.sectionLabel}>Shipping Information</Text>
+                            {order.shippingInfo ? (
+                                <View style={styles.sectionContent}>
+                                    <Text style={styles.shippingName}>{order.shippingInfo.fullName}</Text>
+                                    <Text style={styles.detailText}>{order.shippingInfo.address}, {order.shippingInfo.city}</Text>
+                                    <Text style={styles.detailText}>
+                                        {order.shippingInfo.state} {order.shippingInfo.zipCode}, {order.shippingInfo.country}
+                                    </Text>
+                                    <Text style={styles.detailText}><Ionicons name="call-outline" size={12} color="#6B7280" /> {order.shippingInfo.phone}</Text>
                                 </View>
-                            )}
-                            {order.tax > 0 && (
-                                <View style={styles.summaryRow}>
-                                    <Text style={styles.summaryLabel}>Tax</Text>
-                                    <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
-                                </View>
-                            )}
-                            <View style={[styles.summaryRow, styles.totalRow]}>
-                                <Text style={styles.totalLabel}>Order Total</Text>
-                                <Text style={styles.totalValue}>{formatCurrency(order.total)}</Text>
-                            </View>
-                        </View>
-                    </View>
-
-                    <View style={styles.actionButtons}>
-                        <TouchableOpacity
-                            style={[styles.reorderButton, addingToCart && styles.disabledButton]}
-                            onPress={() => handleReorder(order)}
-                            disabled={addingToCart}
-                        >
-                            {addingToCart ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
                             ) : (
-                                <>
-                                    <Ionicons name="cart" size={16} color="#FFFFFF" />
-                                    <Text style={styles.reorderButtonText}>Reorder</Text>
-                                </>
+                                <Text style={styles.noDetailText}>No shipping info available.</Text>
                             )}
-                        </TouchableOpacity>
+                        </View>
 
-                        <TouchableOpacity
-                            style={styles.helpButton}
-                            onPress={() => Alert.alert('Get Help', `Support for order #${order.orderNumber}`)}
-                        >
-                            <Ionicons name="help-circle-outline" size={16} color="#2563EB" />
-                            <Text style={styles.helpButtonText}>Get Help</Text>
-                        </TouchableOpacity>
+                        <View style={styles.sectionContainer}>
+                            <Text style={styles.sectionLabel}>Payment</Text>
+                            <View style={styles.sectionContent}>
+                                <View style={styles.paymentRow}>
+                                    <Text style={styles.detailText}>Method:</Text>
+                                    <Text style={styles.paymentText}>{order.paymentMethod || 'Credit Card'}</Text>
+                                </View>
+                                <View style={styles.paymentRow}>
+                                    <Text style={styles.detailText}>Status:</Text>
+                                    <View style={[styles.paidBadge]}>
+                                        <Ionicons name="checkmark-circle" size={14} color="#10B981" />
+                                        <Text style={[styles.statusText, { color: '#10B981' }]}>Paid</Text>
+                                    </View>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View style={styles.sectionContainer}>
+                            <Text style={styles.sectionLabel}>Summary</Text>
+                            <View style={styles.sectionContent}>
+                                <View style={styles.summaryRow}>
+                                    <Text style={styles.summaryLabel}>Subtotal</Text>
+                                    <Text style={styles.summaryValue}>{formatCurrency(order.subtotal || order.total)}</Text>
+                                </View>
+                                {order.shippingCost > 0 && (
+                                    <View style={styles.summaryRow}>
+                                        <Text style={styles.summaryLabel}>Shipping</Text>
+                                        <Text style={styles.summaryValue}>{formatCurrency(order.shippingCost)}</Text>
+                                    </View>
+                                )}
+                                {order.tax > 0 && (
+                                    <View style={styles.summaryRow}>
+                                        <Text style={styles.summaryLabel}>Tax</Text>
+                                        <Text style={styles.summaryValue}>{formatCurrency(order.tax)}</Text>
+                                    </View>
+                                )}
+                                <View style={[styles.summaryRow, styles.totalRow]}>
+                                    <Text style={styles.totalLabel}>Order Total</Text>
+                                    <Text style={styles.totalValue}>{formatCurrency(order.total)}</Text>
+                                </View>
+                            </View>
+                        </View>
+
+                        <View style={styles.actionButtons}>
+                            <TouchableOpacity
+                                style={[styles.reorderButton, addingToCart && styles.disabledButton, { flex: 1 }]}
+                                onPress={() => handleReorder(order)}
+                                disabled={addingToCart}
+                            >
+                                {addingToCart ? (
+                                    <ActivityIndicator size="small" color="#FFFFFF" />
+                                ) : (
+                                    <>
+                                        <Ionicons name="cart" size={16} color="#FFFFFF" />
+                                        <Text style={styles.reorderButtonText}>Reorder</Text>
+                                    </>
+                                )}
+                            </TouchableOpacity>
+
+                            {isDelivered && (
+                                <TouchableOpacity
+                                    style={[styles.reviewButton, { flex: 1, marginLeft: 8 }]}
+                                    onPress={() => handleReview(order)}
+                                >
+                                    <Ionicons
+                                        name={hasReviewForFirstItem ? "create-outline" : "star-outline"}
+                                        size={16}
+                                        color={hasReviewForFirstItem ? "#2563EB" : "#059669"}
+                                    />
+                                    <Text style={[styles.reviewButtonText, hasReviewForFirstItem && styles.editReviewButtonText]}>
+                                        {hasReviewForFirstItem ? 'Edit Review' : 'Write Review'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+
+                            <TouchableOpacity
+                                style={[styles.helpButton, { flex: 1, marginLeft: 8 }]}
+                                onPress={() => Alert.alert('Get Help', `Support for order #${order.orderNumber}`)}
+                            >
+                                <Ionicons name="help-circle-outline" size={16} color="#2563EB" />
+                                <Text style={styles.helpButtonText}>Get Help</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                </View>
-            )}
-        </TouchableOpacity>
-    );
+                )}
+            </TouchableOpacity>
+        );
+    };
 
     const renderFilterModal = () => {
         const statuses = ['All', 'Delivered', 'Shipped', 'Processing', 'Cancelled'];
@@ -778,6 +856,20 @@ const styles = StyleSheet.create({
         fontSize: 13,
         color: '#6B7280',
     },
+    reviewStatusContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 4,
+    },
+    reviewStatusText: {
+        fontSize: 12,
+        color: '#6B7280',
+        marginLeft: 4,
+    },
+    reviewedText: {
+        color: '#F59E0B',
+        fontWeight: '600',
+    },
     itemTotal: {
         fontSize: 16,
         fontWeight: '700',
@@ -872,11 +964,9 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        flex: 1,
         padding: 12,
         backgroundColor: '#2563EB',
         borderRadius: 10,
-        marginRight: 8,
     },
     reorderButtonText: {
         color: '#FFFFFF',
@@ -884,15 +974,32 @@ const styles = StyleSheet.create({
         fontWeight: '700',
         marginLeft: 8,
     },
+    reviewButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 12,
+        backgroundColor: '#D1FAE5',
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: '#A7F3D0',
+    },
+    reviewButtonText: {
+        color: '#059669',
+        fontSize: 14,
+        fontWeight: '700',
+        marginLeft: 8,
+    },
+    editReviewButtonText: {
+        color: '#2563EB',
+    },
     helpButton: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
-        flex: 1,
         padding: 12,
         backgroundColor: '#E5E7EB',
         borderRadius: 10,
-        marginLeft: 8,
         borderWidth: 1,
         borderColor: '#DBEAFE'
     },
@@ -908,7 +1015,6 @@ const styles = StyleSheet.create({
     bottomSpacer: {
         height: 20,
     },
-    // --- Filter Modal Styles ---
     modalOverlay: {
         flex: 1,
         justifyContent: 'flex-end',

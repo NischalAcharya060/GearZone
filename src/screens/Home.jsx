@@ -23,7 +23,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Slider } from '@miblanchard/react-native-slider';
 
 import { firestore } from '../firebase/config';
-import { collection, getDocs, query, orderBy, limit, where, onSnapshot } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, limit, where, onSnapshot, doc, getDoc } from 'firebase/firestore';
 
 import ProductCard from '../components/ProductCard';
 import { useCart } from '../context/CartContext';
@@ -50,6 +50,8 @@ const Home = () => {
     const [minRating, setMinRating] = useState(0);
     const [inStockOnly, setInStockOnly] = useState(false);
     const [sortBy, setSortBy] = useState('featured');
+
+    const [productRatings, setProductRatings] = useState({});
 
     const scrollX = useRef(new Animated.Value(0)).current;
     const scaleAnim = useRef(new Animated.Value(1)).current;
@@ -78,6 +80,44 @@ const Home = () => {
             }
         };
     }, [user?.uid]);
+
+    useEffect(() => {
+        if (products.length > 0) {
+            fetchProductRatings();
+        }
+    }, [products]);
+
+    const fetchProductRatings = async () => {
+        try {
+            const ratingsMap = {};
+            const ratingPromises = products.map(async (product) => {
+                const reviewsRef = collection(firestore, 'reviews');
+                const q = query(reviewsRef, where('productId', '==', product.id));
+                const querySnapshot = await getDocs(q);
+
+                let totalRating = 0;
+                let reviewCount = 0;
+
+                querySnapshot.forEach((doc) => {
+                    const review = doc.data();
+                    totalRating += review.rating || 0;
+                    reviewCount++;
+                });
+
+                const averageRating = reviewCount > 0 ? totalRating / reviewCount : 0;
+
+                ratingsMap[product.id] = {
+                    rating: averageRating,
+                    reviewCount: reviewCount
+                };
+            });
+
+            await Promise.all(ratingPromises);
+            setProductRatings(ratingsMap);
+        } catch (error) {
+            console.error('Error fetching product ratings:', error);
+        }
+    };
 
     const setupNotificationListener = () => {
         if (unsubscribeRef.current) unsubscribeRef.current();
@@ -151,6 +191,20 @@ const Home = () => {
         fetchData();
     };
 
+    const getProductRating = (productId) => {
+        const ratingData = productRatings[productId];
+        if (ratingData) {
+            return {
+                rating: ratingData.rating,
+                reviewCount: ratingData.reviewCount
+            };
+        }
+        return {
+            rating: 0,
+            reviewCount: 0
+        };
+    };
+
     const filteredProducts = useMemo(() => {
         let list = products;
 
@@ -167,18 +221,45 @@ const Home = () => {
 
         list = list.filter(p => p.price >= priceRange[0] && p.price <= priceRange[1]);
 
-        if (minRating > 0) list = list.filter(p => (p.rating || 0) >= minRating);
-        if (inStockOnly) list = list.filter(p => p.stock > 0);
-
-        switch (sortBy) {
-            case 'price-low': list.sort((a, b) => a.price - b.price); break;
-            case 'price-high': list.sort((a, b) => b.price - a.price); break;
-            case 'rating': list.sort((a, b) => (b.rating || 0) - (a.rating || 0)); break;
-            case 'newest': list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); break;
+        if (minRating > 0) {
+            list = list.filter(p => {
+                const ratingData = getProductRating(p.id);
+                return ratingData.rating >= minRating;
+            });
         }
 
-        return list;
-    }, [products, selectedCategory, searchQuery, priceRange, minRating, inStockOnly, sortBy]);
+        if (inStockOnly) list = list.filter(p => p.stock > 0);
+
+        const sortedList = [...list];
+        switch (sortBy) {
+            case 'price-low':
+                sortedList.sort((a, b) => a.price - b.price);
+                break;
+            case 'price-high':
+                sortedList.sort((a, b) => b.price - a.price);
+                break;
+            case 'rating':
+                sortedList.sort((a, b) => {
+                    const ratingA = getProductRating(a.id).rating;
+                    const ratingB = getProductRating(b.id).rating;
+                    return ratingB - ratingA;
+                });
+                break;
+            case 'newest':
+                sortedList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                break;
+            case 'featured':
+            default:
+                sortedList.sort((a, b) => {
+                    if (a.featured && !b.featured) return -1;
+                    if (!a.featured && b.featured) return 1;
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                });
+                break;
+        }
+
+        return sortedList;
+    }, [products, selectedCategory, searchQuery, priceRange, minRating, inStockOnly, sortBy, productRatings]);
 
     const handleCartPress = () => {
         if (!user) {
@@ -194,7 +275,12 @@ const Home = () => {
     const handleBannerPress = (banner) => {
         if (banner.productId) {
             const product = products.find(p => p.id === banner.productId);
-            if (product) navigation.navigate('ProductDetail', { product });
+            if (product) navigation.navigate('ProductDetail', {
+                product: {
+                    ...product,
+                    ...getProductRating(product.id)
+                }
+            });
         }
     };
 
@@ -495,20 +581,31 @@ const Home = () => {
                         </View>
                     ) : (
                         <View style={styles.productsGrid}>
-                            {filteredProducts.map((item, index) => (
-                                <View
-                                    key={item.id}
-                                    style={[
-                                        styles.productItem,
-                                        index % 2 === 0 ? styles.productItemLeft : styles.productItemRight
-                                    ]}
-                                >
-                                    <ProductCard
-                                        product={item}
-                                        onPress={() => navigation.navigate('ProductDetail', { product: item })}
-                                    />
-                                </View>
-                            ))}
+                            {filteredProducts.map((item, index) => {
+                                const ratingData = getProductRating(item.id);
+                                const productWithRating = {
+                                    ...item,
+                                    rating: ratingData.rating,
+                                    reviewCount: ratingData.reviewCount
+                                };
+
+                                return (
+                                    <View
+                                        key={item.id}
+                                        style={[
+                                            styles.productItem,
+                                            index % 2 === 0 ? styles.productItemLeft : styles.productItemRight
+                                        ]}
+                                    >
+                                        <ProductCard
+                                            product={productWithRating}
+                                            onPress={() => navigation.navigate('ProductDetail', {
+                                                product: productWithRating
+                                            })}
+                                        />
+                                    </View>
+                                );
+                            })}
                         </View>
                     )}
                 </View>
