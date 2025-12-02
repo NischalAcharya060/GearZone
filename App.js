@@ -34,6 +34,7 @@ import OrderHistory from "./src/screens/OrderHistory";
 import Notifications from "./src/screens/Notifications";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import Review from "./src/screens/Review";
+import MyReviews from "./src/screens/MyReviews";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -193,6 +194,14 @@ const ProfileStack = () => {
                 component={Review}
                 options={{
                     title: 'Rate & Reviews',
+                    headerBackTitle: 'Back'
+                }}
+            />
+            <Stack.Screen
+                name="MyReviews"
+                component={MyReviews}
+                options={{
+                    title: 'My Reviews',
                     headerBackTitle: 'Back'
                 }}
             />

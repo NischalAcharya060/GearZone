@@ -151,6 +151,12 @@ const Profile = () => {
             onPress: () => navigation.navigate('Orders')
         },
         {
+            icon: 'star-outline',
+            title: 'My Reviews',
+            color: '#8B5CF6',
+            onPress: () => navigation.navigate('MyReviews')
+        },
+        {
             icon: 'heart-outline',
             title: 'Wishlist',
             color: '#EC4899',
