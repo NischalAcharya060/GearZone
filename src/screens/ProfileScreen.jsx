@@ -609,10 +609,7 @@ const ProfileScreen = () => {
                         <Text style={styles.sectionTitle}>Account Overview</Text>
                         <InfoItem label="User ID" value={user.uid} />
                         <InfoItem label="Account Created" value={formatDate(userData?.createdAt)} />
-                        <InfoItem
-                            label="Last Sign In"
-                            value={user.metadata?.lastSignInTime ? formatDate(user.metadata.lastSignInTime) : 'N/A'}
-                        />
+
                         {userData?.role && (
                             <InfoItem
                                 label="User Role"

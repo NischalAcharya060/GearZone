@@ -14,16 +14,27 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRoute, useNavigation } from '@react-navigation/native';
-import { useAuth } from '../context/AuthContext'; // Assuming this provides user data
-import { firestore } from '../firebase/config'; // Assuming this is your Firestore instance
-import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
+import { useAuth } from '../context/AuthContext';
+import { firestore } from '../firebase/config';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+
+const COLORS = {
+    primary: '#4F46E5',
+    success: '#10B981',
+    danger: '#EF4444',
+    warning: '#FBBF24',
+    background: '#F9FAFB',
+    surface: '#FFFFFF',
+    text: '#1F2937',
+    subText: '#6B7280',
+    border: '#E5E7EB',
+};
 
 const ReviewScreen = () => {
     const navigation = useNavigation();
     const route = useRoute();
     const { user } = useAuth();
 
-    // Get parameters passed from OrderHistory.jsx
     const { orderId, productId, productName } = route.params || {};
 
     const [rating, setRating] = useState(0);
@@ -38,11 +49,12 @@ const ReviewScreen = () => {
                         key={star}
                         onPress={() => setRating(star)}
                         style={styles.starButton}
+                        activeOpacity={0.8}
                     >
                         <Ionicons
                             name={rating >= star ? 'star' : 'star-outline'}
-                            size={40}
-                            color={rating >= star ? '#FBBF24' : '#9CA3AF'} // Amber color for filled stars
+                            size={44}
+                            color={rating >= star ? COLORS.warning : COLORS.border}
                         />
                     </TouchableOpacity>
                 ))}
@@ -52,27 +64,29 @@ const ReviewScreen = () => {
 
     const handleSubmit = async () => {
         if (rating === 0) {
-            Alert.alert('Required', 'Please select a star rating before submitting.');
+            Alert.alert('Required', 'Please select a star rating before submitting.', [{ text: 'OK' }]);
             return;
         }
 
         if (!user?.uid) {
-            Alert.alert('Error', 'You must be logged in to submit a review.');
+            Alert.alert('Error', 'You must be logged in to submit a review.', [{ text: 'OK' }]);
             return;
         }
 
         if (!productId || !orderId) {
-            Alert.alert('Error', 'Missing product or order information.');
+            Alert.alert('Error', 'Missing product or order information.', [{ text: 'OK' }]);
             return;
         }
 
         setLoading(true);
 
         try {
-            // 1. Save the review to the 'reviews' collection
+            const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+            const reviewsCollectionRef = collection(firestore, `artifacts/${appId}/public/data/reviews`);
+
             const reviewData = {
                 userId: user.uid,
-                userName: user.displayName || 'Anonymous User', // Use user's display name
+                userName: user.displayName || user.email || 'Anonymous User',
                 productId: productId,
                 orderId: orderId,
                 rating: rating,
@@ -80,25 +94,20 @@ const ReviewScreen = () => {
                 createdAt: serverTimestamp(),
             };
 
-            await addDoc(collection(firestore, 'reviews'), reviewData);
-
-            // 2. OPTIONAL: Update a flag in the order item to prevent duplicate reviews
-            // This is complex for a nested item, but for simplicity, we could update the order status
-            // or a flag on the order document itself in a more detailed implementation.
-            // For now, we will rely on the review screen logic to be triggered once.
+            await addDoc(reviewsCollectionRef, reviewData);
 
             Alert.alert(
-                'Success!',
-                'Your review has been submitted successfully.',
+                'Review Submitted!',
+                'Your feedback is valuable and helps other shoppers. Thank you!',
                 [{
-                    text: 'OK',
+                    text: 'Done',
                     onPress: () => navigation.goBack()
                 }]
             );
 
         } catch (error) {
             console.error('Error submitting review:', error);
-            Alert.alert('Submission Failed', 'Could not submit your review. Please try again.');
+            Alert.alert('Submission Failed', 'Could not submit your review. Please check your connection and try again.');
         } finally {
             setLoading(false);
         }
@@ -111,52 +120,57 @@ const ReviewScreen = () => {
                 behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                 keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
             >
-                <View style={styles.header}>
-                    <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backButton}>
-                        <Ionicons name="arrow-back" size={24} color="#333" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>Write a Review</Text>
-                    <View style={styles.placeholder} />
-                </View>
-
                 <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
 
-                    <Text style={styles.productLabel}>
-                        Reviewing:
-                    </Text>
-                    <Text style={styles.productName}>{productName || 'Product'}</Text>
+                    <Text style={styles.mainTitle}>Share Your Experience</Text>
+
+                    <View style={styles.productInfoContainer}>
+                        <Text style={styles.productLabel}>
+                            Reviewing:
+                        </Text>
+                        <Text style={styles.productName}>{productName || 'Product Title'}</Text>
+                    </View>
 
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Your Rating</Text>
-                        <Text style={styles.sectionSubtitle}>Tap a star to rate the product.</Text>
+                        <Text style={styles.sectionTitle}>1. How would you rate this product?</Text>
+                        <Text style={styles.sectionSubtitle}>Select the number of stars you believe it deserves.</Text>
                         <StarRating />
                     </View>
 
                     <View style={styles.section}>
-                        <Text style={styles.sectionTitle}>Your Comment (Optional)</Text>
+                        <Text style={styles.sectionTitle}>2. Write your comments (Optional)</Text>
+                        <Text style={styles.sectionSubtitle}>Share your experience—what you liked or what could be better.</Text>
                         <TextInput
                             style={styles.textInput}
-                            placeholder="Tell us what you loved or what could be improved..."
+                            placeholder="Type your detailed review here..."
+                            placeholderTextColor={COLORS.subText + '90'}
                             value={reviewText}
                             onChangeText={setReviewText}
                             multiline
-                            numberOfLines={5}
+                            numberOfLines={6}
                             textAlignVertical="top"
                             maxLength={500}
                         />
-                        <Text style={styles.charCount}>{reviewText.length}/500</Text>
+                        <Text style={styles.charCount}>{reviewText.length}/500 characters</Text>
                     </View>
 
                     <View style={styles.submitContainer}>
                         <TouchableOpacity
-                            style={[styles.submitButton, loading && styles.disabledButton]}
+                            style={[
+                                styles.submitButton,
+                                loading && styles.disabledButton,
+                                rating === 0 && styles.disabledButton
+                            ]}
                             onPress={handleSubmit}
                             disabled={loading || rating === 0}
+                            activeOpacity={0.8}
                         >
                             {loading ? (
-                                <ActivityIndicator size="small" color="#FFFFFF" />
+                                <ActivityIndicator size="small" color={COLORS.surface} />
                             ) : (
-                                <Text style={styles.submitButtonText}>Submit Review</Text>
+                                <Text style={styles.submitButtonText}>
+                                    {rating === 0 ? 'Select Rating to Submit' : 'Submit Review'}
+                                </Text>
                             )}
                         </TouchableOpacity>
                     </View>
@@ -169,63 +183,66 @@ const ReviewScreen = () => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#F8FAFC',
+        backgroundColor: COLORS.background,
     },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    placeholder: {
-        width: 32,
+    mainTitle: {
+        fontSize: 28,
+        fontWeight: '800',
+        color: COLORS.text,
+        textAlign: 'center',
+        marginTop: 10,
+        marginBottom: 30,
     },
     scrollContent: {
         padding: 20,
+        paddingTop: 20,
+    },
+    productInfoContainer: {
+        marginBottom: 25,
+        padding: 15,
+        backgroundColor: COLORS.surface,
+        borderRadius: 12,
+        borderLeftWidth: 4,
+        borderLeftColor: COLORS.primary,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.05,
+        shadowRadius: 2,
+        elevation: 1,
     },
     productLabel: {
-        fontSize: 16,
-        color: '#6B7280',
-        marginBottom: 4,
+        fontSize: 14,
+        color: COLORS.subText,
+        marginBottom: 2,
     },
     productName: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#1F2937',
-        marginBottom: 24,
+        fontSize: 18,
+        fontWeight: '700',
+        color: COLORS.text,
     },
     section: {
-        marginBottom: 30,
-        backgroundColor: 'white',
-        borderRadius: 12,
-        padding: 16,
+        marginBottom: 25,
+        backgroundColor: COLORS.surface,
+        borderRadius: 16,
+        padding: 20,
+        borderWidth: 1,
+        borderColor: COLORS.border,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
+        shadowOffset: { width: 0, height: 1 },
         shadowOpacity: 0.05,
-        shadowRadius: 4,
-        elevation: 1,
+        shadowRadius: 3,
+        elevation: 2,
     },
     sectionTitle: {
         fontSize: 18,
-        fontWeight: 'bold',
-        color: '#1F2937',
+        fontWeight: '700',
+        color: COLORS.text,
         marginBottom: 4,
     },
     sectionSubtitle: {
         fontSize: 14,
-        color: '#6B7280',
-        marginBottom: 12,
+        color: COLORS.subText,
+        marginBottom: 16,
     },
     starContainer: {
         flexDirection: 'row',
@@ -233,44 +250,51 @@ const styles = StyleSheet.create({
         paddingVertical: 10,
     },
     starButton: {
-        paddingHorizontal: 8,
+        paddingHorizontal: 6,
     },
     textInput: {
-        minHeight: 120,
-        borderColor: '#E5E7EB',
+        minHeight: 140,
+        borderColor: COLORS.border,
         borderWidth: 1,
-        borderRadius: 8,
-        padding: 12,
+        borderRadius: 12,
+        padding: 16,
         fontSize: 16,
-        color: '#1F2937',
-        marginTop: 8,
-        backgroundColor: '#F9FAFB',
+        color: COLORS.text,
+        backgroundColor: COLORS.background,
     },
     charCount: {
         textAlign: 'right',
         fontSize: 12,
-        color: '#9CA3AF',
-        marginTop: 4,
+        color: COLORS.subText,
+        marginTop: 8,
     },
     submitContainer: {
         paddingTop: 10,
-        marginBottom: 30,
+        marginBottom: 40,
     },
     submitButton: {
-        backgroundColor: '#059669', // Green color for submission
-        padding: 16,
+        backgroundColor: COLORS.success,
+        padding: 18,
         borderRadius: 12,
         alignItems: 'center',
         justifyContent: 'center',
         flexDirection: 'row',
+        shadowColor: COLORS.success,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 5,
+        elevation: 5,
     },
     submitButtonText: {
-        color: 'white',
+        color: COLORS.surface,
         fontSize: 18,
-        fontWeight: 'bold',
+        fontWeight: '800',
     },
     disabledButton: {
-        opacity: 0.7,
+        backgroundColor: COLORS.subText,
+        opacity: 0.8,
+        shadowOpacity: 0.0,
+        elevation: 0,
     },
 });
 

@@ -9,7 +9,7 @@ import {
     ScrollView,
     Alert,
     ActivityIndicator,
-    RefreshControl, // Add this import
+    RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
@@ -17,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 
 // Firebase imports
 import { firestore } from '../firebase/config';
-import { collection, query, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 const Profile = () => {
     const { user, logout } = useAuth();
@@ -29,7 +29,7 @@ const Profile = () => {
     const [wishlistCount, setWishlistCount] = useState(0);
     const [compareCount, setCompareCount] = useState(0);
     const [statsLoading, setStatsLoading] = useState(true);
-    const [refreshing, setRefreshing] = useState(false); // Add refreshing state
+    const [refreshing, setRefreshing] = useState(false);
 
     // --- Data Fetching Logic ---
     const fetchStats = async () => {
@@ -41,10 +41,14 @@ const Profile = () => {
         try {
             const userId = user.uid;
 
-            // Query nested subcollections under the user document
+            // Query for DELIVERED orders only from the root 'orders' collection
             const ordersQuery = query(
-                collection(firestore, 'users', userId, 'orders')
+                collection(firestore, 'orders'),
+                where('userId', '==', userId),
+                where('status', '==', 'delivered')
             );
+
+            // Query nested subcollections under the user document for wishlist and compare
             const wishlistQuery = query(
                 collection(firestore, 'users', userId, 'wishlist')
             );
@@ -252,7 +256,7 @@ const Profile = () => {
                                 onPress={() => navigation.navigate('Orders')}
                             >
                                 <Text style={styles.statNumber}>{orderCount}</Text>
-                                <Text style={styles.statLabel}>Orders</Text>
+                                <Text style={styles.statLabel}>Delivered Orders</Text>
                             </TouchableOpacity>
                             <View style={styles.statDivider} />
                             <TouchableOpacity

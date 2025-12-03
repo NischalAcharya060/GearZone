@@ -1,0 +1,46 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <!-- Outer Circle -->
+    <circle cx="100" cy="100" r="80" fill="#2563EB" opacity="0.1"/>
+
+    <!-- Gear 1 (Main) -->
+    <circle cx="100" cy="100" r="40" fill="#2563EB"/>
+    <circle cx="100" cy="100" r="20" fill="white"/>
+
+    <!-- Gear Teeth -->
+    <path d="M100 60L103 66H97L100 60Z" fill="#2563EB"/>
+    <path d="M140 100L134 103V97L140 100Z" fill="#2563EB"/>
+    <path d="M100 140L97 134H103L100 140Z" fill="#2563EB"/>
+    <path d="M60 100L66 97V103L60 100Z" fill="#2563EB"/>
+
+    <!-- Diagonal Teeth -->
+    <path d="M116 68L118 73H112L116 68Z" fill="#2563EB" transform="rotate(45 100 100)"/>
+    <path d="M132 116L127 118V112L132 116Z" fill="#2563EB" transform="rotate(45 100 100)"/>
+    <path d="M84 132L82 127H88L84 132Z" fill="#2563EB" transform="rotate(45 100 100)"/>
+    <path d="M68 84L73 82V88L68 84Z" fill="#2563EB" transform="rotate(45 100 100)"/>
+
+    <!-- Smaller Gear (Top Right) -->
+    <circle cx="140" cy="60" r="20" fill="#3B82F6"/>
+    <circle cx="140" cy="60" r="8" fill="white"/>
+
+    <!-- Small Gear Teeth -->
+    <path d="M140 40L142 44H138L140 40Z" fill="#3B82F6"/>
+    <path d="M160 60L156 62V58L160 60Z" fill="#3B82F6"/>
+    <path d="M140 80L138 76H142L140 80Z" fill="#3B82F6"/>
+    <path d="M120 60L124 58V62L120 60Z" fill="#3B82F6"/>
+
+    <!-- Smaller Gear (Bottom Left) -->
+    <circle cx="60" cy="140" r="15" fill="#60A5FA"/>
+    <circle cx="60" cy="140" r="6" fill="white"/>
+
+    <!-- Small Gear Teeth -->
+    <path d="M60 125L62 128H58L60 125Z" fill="#60A5FA"/>
+    <path d="M75 140L72 142V138L75 140Z" fill="#60A5FA"/>
+    <path d="M60 155L58 152H62L60 155Z" fill="#60A5FA"/>
+    <path d="M45 140L48 138V142L45 140Z" fill="#60A5FA"/>
+
+    <!-- Sparkle Effects -->
+    <path d="M100 30L102 36H98L100 30Z" fill="#FBBF24"/>
+    <path d="M170 100L164 102V98L170 100Z" fill="#FBBF24"/>
+    <path d="M100 170L98 164H102L100 170Z" fill="#FBBF24"/>
+    <path d="M30 100L36 98V102L30 100Z" fill="#FBBF24"/>
+</svg>

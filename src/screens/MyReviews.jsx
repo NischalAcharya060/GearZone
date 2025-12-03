@@ -118,7 +118,6 @@ const MyReviews = () => {
                         });
                     }
                 } catch (error) {
-                    console.error('Error fetching product details:', error);
                     reviewsData.push({
                         id: docSnap.id,
                         ...reviewData,
@@ -129,7 +128,6 @@ const MyReviews = () => {
 
             setReviews(reviewsData);
         } catch (error) {
-            console.error('Error fetching reviews:', error);
             Alert.alert('Error', 'Failed to load your reviews. Please try again.');
         } finally {
             setLoading(false);
@@ -175,7 +173,6 @@ const MyReviews = () => {
             fetchReviews();
             Alert.alert('Success', 'Review updated successfully');
         } catch (error) {
-            console.error('Error updating review:', error);
             Alert.alert('Error', 'Failed to update review. Please try again.');
         } finally {
             setUpdating(false);
@@ -195,7 +192,6 @@ const MyReviews = () => {
 
             Alert.alert('Success', 'Review deleted successfully');
         } catch (error) {
-            console.error('Error deleting review:', error);
             Alert.alert('Error', 'Failed to delete review. Please try again.');
         } finally {
             setDeleting(false);
@@ -437,17 +433,6 @@ const MyReviews = () => {
     if (!user) {
         return (
             <SafeAreaView style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Ionicons name="arrow-back" size={24} color="#333" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>My Reviews</Text>
-                    <View style={styles.placeholder} />
-                </View>
-
                 <View style={styles.signInContainer}>
                     <Ionicons name="star-outline" size={64} color="#D1D5DB" />
                     <Text style={styles.signInTitle}>Sign In Required</Text>
@@ -468,17 +453,6 @@ const MyReviews = () => {
     if (loading) {
         return (
             <SafeAreaView style={styles.container}>
-                <View style={styles.header}>
-                    <TouchableOpacity
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Ionicons name="arrow-back" size={24} color="#333" />
-                    </TouchableOpacity>
-                    <Text style={styles.headerTitle}>My Reviews</Text>
-                    <View style={styles.placeholder} />
-                </View>
-
                 <View style={styles.loadingContainer}>
                     <ActivityIndicator size="large" color="#2563EB" />
                     <Text style={styles.loadingText}>Loading your reviews...</Text>
@@ -489,17 +463,6 @@ const MyReviews = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={24} color="#333" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>My Reviews</Text>
-                <View style={styles.placeholder} />
-            </View>
-
             {reviews.length === 0 ? (
                 <ScrollView
                     style={styles.scrollView}
@@ -576,26 +539,6 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
         backgroundColor: '#F8FAFC',
-    },
-    header: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        padding: 16,
-        backgroundColor: 'white',
-        borderBottomWidth: 1,
-        borderBottomColor: '#E5E7EB',
-    },
-    backButton: {
-        padding: 4,
-    },
-    headerTitle: {
-        fontSize: 22,
-        fontWeight: 'bold',
-        color: '#1F2937',
-    },
-    placeholder: {
-        width: 32,
     },
     loadingContainer: {
         flex: 1,
