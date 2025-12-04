@@ -35,6 +35,7 @@ import Notifications from "./src/screens/Notifications";
 import ProfileScreen from "./src/screens/ProfileScreen";
 import Review from "./src/screens/Review";
 import MyReviews from "./src/screens/MyReviews";
+import CODConfirmation from "./src/screens/CODConfirmation";
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -97,6 +98,13 @@ const CartStack = () => {
             <Stack.Screen
                 name="OrderConfirmation"
                 component={OrderConfirmation}
+                options={{
+                    headerShown: false,
+                }}
+            />
+            <Stack.Screen
+                name="CODConfirmation"
+                component={CODConfirmation}
                 options={{
                     headerShown: false,
                 }}

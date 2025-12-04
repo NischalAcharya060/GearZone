@@ -16,7 +16,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { useCart } from '../context/CartContext';
 import { useNavigation } from '@react-navigation/native';
 import { StripeProvider, useStripe } from '@stripe/stripe-react-native';
-
 import { useAuth } from '../context/AuthContext';
 import { firestore } from '../firebase/config';
 import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
@@ -82,7 +81,7 @@ const StripeURLHandler = () => {
     return null;
 };
 
-const Checkout = ({ route }) => { // route is required to get params
+const Checkout = ({ route }) => {
     useEffect(() => {
         console.log("Stripe Publishable Key in use:", STRIPE_PUBLISHABLE_KEY);
     }, []);
@@ -92,7 +91,10 @@ const Checkout = ({ route }) => { // route is required to get params
     const { initPaymentSheet, presentPaymentSheet } = useStripe();
     const { user } = useAuth();
 
-    // --- Direct Purchase Logic Start ---
+    // Payment method states
+    const [selectedPaymentMethod, setSelectedPaymentMethod] = useState('card'); // 'card' or 'cod'
+
+    // Direct Purchase Logic
     const directPurchaseItem = route.params?.directPurchaseItem;
     const itemsToProcess = directPurchaseItem ? [directPurchaseItem] : cartItems;
 
@@ -105,11 +107,11 @@ const Checkout = ({ route }) => { // route is required to get params
     const shipping = subtotal > 0 ? 9.99 : 0;
     const tax = subtotal * 0.08;
     const total = subtotal + shipping + tax;
-    // --- Direct Purchase Logic End ---
 
     const [defaultAddress, setDefaultAddress] = useState(null);
     const [isUsingDefaultAddress, setIsUsingDefaultAddress] = useState(true);
     const [addressLoading, setAddressLoading] = useState(true);
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const [formData, setFormData] = useState({
         fullName: '',
@@ -121,8 +123,6 @@ const Checkout = ({ route }) => { // route is required to get params
         zipCode: '',
         country: 'United States',
     });
-
-    const [isProcessing, setIsProcessing] = useState(false);
 
     const handleInputChange = (field, value) => {
         setFormData(prev => ({
@@ -198,6 +198,7 @@ const Checkout = ({ route }) => { // route is required to get params
         });
     };
 
+    // Fetch payment sheet params for Stripe
     const fetchPaymentSheetParams = async (totalAmount) => {
         const url = getApiUrl();
 
@@ -235,18 +236,12 @@ const Checkout = ({ route }) => { // route is required to get params
         }
     };
 
-    const saveOrderToFirestore = async () => {
+    // Save order to Firestore
+    const saveOrderToFirestore = async (paymentMethod) => {
         try {
-            // Totals are already calculated using itemsToProcess outside this function
-            // const subtotal = getCartTotal(); // REMOVED
-            // const shipping = subtotal > 0 ? 9.99 : 0; // REMOVED
-            // const tax = subtotal * 0.08; // REMOVED
-            // const total = subtotal + shipping + tax; // REMOVED
-
             const orderData = {
                 userId: user.uid,
                 orderNumber: `ORD-${Date.now()}`,
-                // Use itemsToProcess for order items
                 items: itemsToProcess.map(item => ({
                     productId: item.id,
                     name: item.name,
@@ -254,7 +249,6 @@ const Checkout = ({ route }) => { // route is required to get params
                     quantity: item.quantity,
                     image: item.images?.[0] || item.image || 'N/A'
                 })),
-                // Use calculated totals
                 total: total,
                 subtotal: subtotal,
                 shippingCost: shipping,
@@ -269,11 +263,21 @@ const Checkout = ({ route }) => { // route is required to get params
                     zipCode: formData.zipCode,
                     country: formData.country
                 },
-                paymentMethod: 'Credit Card',
-                status: 'processing',
+                paymentMethod: paymentMethod,
+                status: paymentMethod === 'cod' ? 'pending' : 'processing',
+                paymentStatus: paymentMethod === 'cod' ? 'pending' : 'paid',
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString()
             };
+
+            // For COD orders, you might want to add additional information
+            if (paymentMethod === 'cod') {
+                orderData.codDetails = {
+                    cashToCollect: total,
+                    deliveryInstructions: '', // You can add a field for this
+                    expectedDelivery: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days from now
+                };
+            }
 
             const ordersRef = collection(firestore, 'orders');
             const docRef = await addDoc(ordersRef, orderData);
@@ -295,9 +299,9 @@ const Checkout = ({ route }) => { // route is required to get params
         }
     };
 
+    // Initialize payment sheet for Stripe
     const initializePaymentSheet = async () => {
         try {
-            // Use the already calculated total amount
             const totalAmount = total;
 
             const { paymentIntent, ephemeralKey, customer } = await fetchPaymentSheetParams(totalAmount);
@@ -308,7 +312,7 @@ const Checkout = ({ route }) => { // route is required to get params
                 customerEphemeralKeySecret: ephemeralKey,
                 customerId: customer,
                 allowsDelayedPaymentMethods: true,
-                returnURL: 'yourapp://stripe-redirect',
+                returnURL: 'gearzone://stripe-redirect',
                 defaultBillingDetails: {
                     name: formData.fullName,
                     email: formData.email,
@@ -337,6 +341,7 @@ const Checkout = ({ route }) => { // route is required to get params
         }
     };
 
+    // Open payment sheet for Stripe
     const openPaymentSheet = async () => {
         const { error } = await presentPaymentSheet();
 
@@ -348,10 +353,42 @@ const Checkout = ({ route }) => { // route is required to get params
             }
             setIsProcessing(false);
         } else {
-            await handlePaymentSuccess();
+            await handlePaymentSuccess('Credit Card');
         }
     };
 
+    // Handle Cash on Delivery order
+    const handleCODOrder = async () => {
+        try {
+            // Save order with COD payment method
+            const savedOrder = await saveOrderToFirestore('Cash on Delivery');
+
+            // Navigate to COD confirmation screen
+            navigation.navigate('CODConfirmation', {
+                orderTotal: total,
+                orderNumber: savedOrder.orderNumber,
+                orderId: savedOrder.id,
+                paymentMethod: 'Cash on Delivery',
+                cashToCollect: total,
+                deliveryAddress: {
+                    name: formData.fullName,
+                    address: formData.address,
+                    city: formData.city,
+                    state: formData.state,
+                    zipCode: formData.zipCode,
+                    phone: formData.phone
+                }
+            });
+
+        } catch (error) {
+            console.error('Error processing COD order:', error);
+            Alert.alert('Error', 'There was an issue placing your COD order. Please try again.');
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    // Main checkout handler
     const handleCheckout = async () => {
         // Validate required fields
         const requiredFields = ['fullName', 'email', 'phone', 'address', 'city', 'state', 'zipCode'];
@@ -371,11 +408,32 @@ const Checkout = ({ route }) => { // route is required to get params
         setIsProcessing(true);
 
         try {
-            const initialized = await initializePaymentSheet();
-            if (initialized) {
-                await openPaymentSheet();
+            if (selectedPaymentMethod === 'cod') {
+                // Show COD confirmation dialog
+                Alert.alert(
+                    'Confirm Cash on Delivery',
+                    `You will pay $${total.toFixed(2)} in cash when your order is delivered. Continue?`,
+                    [
+                        {
+                            text: 'Cancel',
+                            style: 'cancel',
+                            onPress: () => setIsProcessing(false)
+                        },
+                        {
+                            text: 'Confirm Order',
+                            style: 'default',
+                            onPress: handleCODOrder
+                        }
+                    ]
+                );
             } else {
-                setIsProcessing(false);
+                // Process card payment
+                const initialized = await initializePaymentSheet();
+                if (initialized) {
+                    await openPaymentSheet();
+                } else {
+                    setIsProcessing(false);
+                }
             }
         } catch (error) {
             console.error('Checkout process failed:', error);
@@ -384,29 +442,36 @@ const Checkout = ({ route }) => { // route is required to get params
         }
     };
 
-    const handlePaymentSuccess = async () => {
+    const handlePaymentSuccess = async (paymentMethod = 'Credit Card') => {
         try {
-            // Save order to Firestore (clears cart inside if not direct purchase)
-            const savedOrder = await saveOrderToFirestore();
-
-            // Totals are already calculated using itemsToProcess
+            // Save order to Firestore
+            const savedOrder = await saveOrderToFirestore(paymentMethod);
 
             // Navigate to order confirmation
-            navigation.navigate('OrderConfirmation', {
-                orderTotal: total, // Use calculated total
-                orderNumber: savedOrder.orderNumber,
-                orderId: savedOrder.id,
-                paymentMethod: 'Credit Card'
-            });
+            if (paymentMethod === 'Cash on Delivery') {
+                navigation.navigate('CODConfirmation', {
+                    orderTotal: total,
+                    orderNumber: savedOrder.orderNumber,
+                    orderId: savedOrder.id,
+                    paymentMethod: paymentMethod,
+                    cashToCollect: total
+                });
+            } else {
+                navigation.navigate('OrderConfirmation', {
+                    orderTotal: total,
+                    orderNumber: savedOrder.orderNumber,
+                    orderId: savedOrder.id,
+                    paymentMethod: paymentMethod
+                });
+            }
 
         } catch (error) {
             console.error('Error handling payment success:', error);
-            Alert.alert('Error', 'Payment was successful but there was an issue saving your order. Please contact support.');
+            Alert.alert('Error', 'There was an issue saving your order. Please contact support.');
         } finally {
             setIsProcessing(false);
         }
     };
-
 
     const DefaultAddressDisplay = ({ address, onEdit }) => (
         <View style={styles.addressDisplayCard}>
@@ -598,46 +663,117 @@ const Checkout = ({ route }) => { // route is required to get params
                     <View style={styles.section}>
                         <Text style={styles.sectionTitle}>Payment Method</Text>
 
-                        <View
+                        {/* Credit/Debit Card Option */}
+                        <TouchableOpacity
                             style={[
                                 styles.paymentOption,
-                                styles.paymentOptionSelected
+                                selectedPaymentMethod === 'card' && styles.paymentOptionSelected
                             ]}
+                            onPress={() => setSelectedPaymentMethod('card')}
+                            disabled={isProcessing}
                         >
                             <View style={styles.paymentOptionContent}>
                                 <Ionicons
                                     name="card-outline"
                                     size={24}
-                                    color="#2563EB"
+                                    color={selectedPaymentMethod === 'card' ? '#2563EB' : '#6B7280'}
                                 />
                                 <View style={styles.paymentText}>
                                     <Text style={styles.paymentTitle}>Credit/Debit Card</Text>
                                     <Text style={styles.paymentSubtitle}>Pay securely with your card</Text>
                                 </View>
                             </View>
-                            <Ionicons name="checkmark-circle" size={24} color="#2563EB" />
+                            {selectedPaymentMethod === 'card' && (
+                                <Ionicons name="checkmark-circle" size={24} color="#2563EB" />
+                            )}
+                        </TouchableOpacity>
+
+                        {/* Cash on Delivery Option */}
+                        <TouchableOpacity
+                            style={[
+                                styles.paymentOption,
+                                selectedPaymentMethod === 'cod' && styles.paymentOptionSelected
+                            ]}
+                            onPress={() => setSelectedPaymentMethod('cod')}
+                            disabled={isProcessing}
+                        >
+                            <View style={styles.paymentOptionContent}>
+                                <Ionicons
+                                    name="cash-outline"
+                                    size={24}
+                                    color={selectedPaymentMethod === 'cod' ? '#10B981' : '#6B7280'}
+                                />
+                                <View style={styles.paymentText}>
+                                    <Text style={styles.paymentTitle}>Cash on Delivery</Text>
+                                    <Text style={styles.paymentSubtitle}>Pay when you receive your order</Text>
+                                </View>
+                            </View>
+                            {selectedPaymentMethod === 'cod' && (
+                                <Ionicons name="checkmark-circle" size={24} color="#10B981" />
+                            )}
+                        </TouchableOpacity>
+
+                        {/* Payment Notes based on selection */}
+                        {selectedPaymentMethod === 'card' ? (
+                            <View style={styles.paymentNote}>
+                                <Ionicons name="lock-closed" size={16} color="#6B7280" />
+                                <Text style={styles.paymentNoteText}>
+                                    Your payment details are secure and encrypted
+                                </Text>
+                            </View>
+                        ) : (
+                            <View style={styles.codNote}>
+                                <Ionicons name="information-circle" size={16} color="#F59E0B" />
+                                <Text style={styles.codNoteText}>
+                                    You'll pay ${total.toFixed(2)} in cash when your order arrives
+                                </Text>
+                            </View>
+                        )}
+                    </View>
+
+                    {selectedPaymentMethod === 'card' && (
+                        <>
+                            <View style={styles.securitySection}>
+                                <Ionicons name="shield-checkmark" size={20} color="#10B981" />
+                                <Text style={styles.securityText}>
+                                    Your payment information is secure and encrypted with Stripe
+                                </Text>
+                            </View>
+
+                            <View style={styles.stripeSection}>
+                                <Text style={styles.stripeText}>Secured by</Text>
+                                <Ionicons name="card" size={24} color="#635BFF" />
+                                <Text style={styles.stripeBrand}>Stripe</Text>
+                            </View>
+                        </>
+                    )}
+
+                    {selectedPaymentMethod === 'cod' && (
+                        <View style={styles.codInfoSection}>
+                            <View style={styles.codInfoHeader}>
+                                <Ionicons name="time-outline" size={20} color="#F59E0B" />
+                                <Text style={styles.codInfoTitle}>Cash on Delivery Information</Text>
+                            </View>
+                            <View style={styles.codInfoContent}>
+                                <View style={styles.codInfoItem}>
+                                    <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                    <Text style={styles.codInfoText}>No online payment required</Text>
+                                </View>
+                                <View style={styles.codInfoItem}>
+                                    <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                    <Text style={styles.codInfoText}>Pay cash to delivery person</Text>
+                                </View>
+                                <View style={styles.codInfoItem}>
+                                    <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                    <Text style={styles.codInfoText}>Have exact change ready</Text>
+                                </View>
+                                <View style={styles.codInfoItem}>
+                                    <Ionicons name="checkmark-circle" size={16} color="#10B981" />
+                                    <Text style={styles.codInfoText}>Standard delivery times apply</Text>
+                                </View>
+                            </View>
                         </View>
-
-                        <View style={styles.paymentNote}>
-                            <Ionicons name="lock-closed" size={16} color="#6B7280" />
-                            <Text style={styles.paymentNoteText}>
-                                Your payment details are secure and encrypted
-                            </Text>
-                        </View>
-                    </View>
-
-                    <View style={styles.securitySection}>
-                        <Ionicons name="shield-checkmark" size={20} color="#10B981" />
-                        <Text style={styles.securityText}>
-                            Your payment information is secure and encrypted with Stripe
-                        </Text>
-                    </View>
-
-                    <View style={styles.stripeSection}>
-                        <Text style={styles.stripeText}>Secured by</Text>
-                        <Ionicons name="card" size={24} color="#635BFF" />
-                        <Text style={styles.stripeBrand}>Stripe</Text>
-                    </View>
+                    )}
 
                     <View style={styles.bottomSpacer} />
                 </ScrollView>
@@ -646,7 +782,8 @@ const Checkout = ({ route }) => { // route is required to get params
                     <TouchableOpacity
                         style={[
                             styles.checkoutButton,
-                            (isProcessing || itemsToProcess.length === 0) && styles.checkoutButtonDisabled
+                            (isProcessing || itemsToProcess.length === 0) && styles.checkoutButtonDisabled,
+                            selectedPaymentMethod === 'cod' && styles.codButton
                         ]}
                         onPress={handleCheckout}
                         disabled={isProcessing || itemsToProcess.length === 0}
@@ -658,7 +795,10 @@ const Checkout = ({ route }) => { // route is required to get params
                             </View>
                         ) : (
                             <Text style={styles.checkoutButtonText}>
-                                Pay ${total.toFixed(2)}
+                                {selectedPaymentMethod === 'cod'
+                                    ? `Place COD Order - $${total.toFixed(2)}`
+                                    : `Pay $${total.toFixed(2)}`
+                                }
                             </Text>
                         )}
                     </TouchableOpacity>
@@ -939,6 +1079,23 @@ const styles = StyleSheet.create({
         color: '#6B7280',
         marginLeft: 8,
     },
+    codNote: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginTop: 16,
+        padding: 12,
+        backgroundColor: '#FFFBEB',
+        borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#FDE68A',
+    },
+    codNoteText: {
+        fontSize: 12,
+        color: '#92400E',
+        marginLeft: 8,
+        fontWeight: '500',
+    },
     securitySection: {
         flexDirection: 'row',
         alignItems: 'center',
@@ -976,6 +1133,44 @@ const styles = StyleSheet.create({
         color: '#635BFF',
         marginLeft: 4,
     },
+    codInfoSection: {
+        backgroundColor: 'white',
+        marginHorizontal: 16,
+        marginTop: 16,
+        padding: 20,
+        borderRadius: 12,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1,
+        shadowRadius: 3,
+        elevation: 2,
+        borderWidth: 1,
+        borderColor: '#FDE68A',
+    },
+    codInfoHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 12,
+    },
+    codInfoTitle: {
+        fontSize: 16,
+        fontWeight: '600',
+        color: '#92400E',
+        marginLeft: 8,
+    },
+    codInfoContent: {
+        marginLeft: 4,
+    },
+    codInfoItem: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    codInfoText: {
+        fontSize: 14,
+        color: '#374151',
+        marginLeft: 8,
+    },
     bottomSpacer: {
         height: 100,
     },
@@ -1002,6 +1197,9 @@ const styles = StyleSheet.create({
     },
     checkoutButtonDisabled: {
         backgroundColor: '#9CA3AF',
+    },
+    codButton: {
+        backgroundColor: '#10B981',
     },
     checkoutButtonText: {
         color: 'white',
