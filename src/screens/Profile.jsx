@@ -166,18 +166,6 @@ const Profile = () => {
             color: '#EC4899',
             onPress: () => navigation.navigate('WishlistTab')
         },
-        {
-            icon: 'settings-outline',
-            title: 'Settings',
-            color: '#6B7280',
-            onPress: () => Alert.alert('Coming Soon', 'Settings feature coming soon!')
-        },
-        {
-            icon: 'help-circle-outline',
-            title: 'Help & Support',
-            color: '#EF4444',
-            onPress: () => Alert.alert('Coming Soon', 'Help & Support feature coming soon!')
-        },
     ];
 
     if (!user) {
