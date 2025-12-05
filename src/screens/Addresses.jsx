@@ -392,16 +392,16 @@ const Addresses = () => {
 
     return (
         <SafeAreaView style={styles.container}>
-            <View style={styles.header}>
-                <TouchableOpacity
-                    style={styles.backButton}
-                    onPress={() => navigation.goBack()}
-                >
-                    <Ionicons name="arrow-back" size={24} color="#333" />
-                </TouchableOpacity>
-                <Text style={styles.headerTitle}>My Addresses</Text>
-                <View style={styles.placeholder} />
-            </View>
+            {/*<View style={styles.header}>*/}
+            {/*    <TouchableOpacity*/}
+            {/*        style={styles.backButton}*/}
+            {/*        onPress={() => navigation.goBack()}*/}
+            {/*    >*/}
+            {/*        <Ionicons name="arrow-back" size={24} color="#333" />*/}
+            {/*    </TouchableOpacity>*/}
+            {/*    <Text style={styles.headerTitle}>My Addresses</Text>*/}
+            {/*    <View style={styles.placeholder} />*/}
+            {/*</View>*/}
 
             <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
                 <TouchableOpacity style={styles.addButton} onPress={handleAddAddress}>
